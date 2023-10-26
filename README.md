@@ -81,7 +81,7 @@ Please cite the following paper corresponding to the repository:
 @article{ye2023natural,
   title={Natural language is all a graph needs},
   author={Ye, Ruosong and Zhang, Caiqi and Wang, Runhui and Xu, Shuyuan and Zhang, Yongfeng},
-  journal={arXiv preprint arXiv:2308.07134},
+  journal={arXiv:2308.07134},
   year={2023}
 }
 
