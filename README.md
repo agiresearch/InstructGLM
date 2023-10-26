@@ -37,12 +37,12 @@ git clone https://github.com/agiresearch/InstructGLM.git
 
   
 
-3. Download Llama-7b pretrained checkpoint via this [Google Drive link](https://drive.google.com/file/d/1wLaPMSDAxCMcl3pJ-0bYymOid3gkULc3/view?usp=drive_link). Then please put the ./7B folder under the same path with ./scripts folder.
+2. Download Llama-7b pretrained checkpoint via this [Google Drive link](https://drive.google.com/file/d/1wLaPMSDAxCMcl3pJ-0bYymOid3gkULc3/view?usp=drive_link). Then please put the ./7B folder under the same path with ./scripts folder.
 
   
   
 
-4. Multi-task Multi-prompt Instruction Tuning
+3. Multi-task Multi-prompt Instruction Tuning
 
   
 
@@ -61,7 +61,7 @@ Here *8* means using 8 GPUs to conduct parallel instruction tuning with DDP.
 bash scripts/test_llama.sh 8
 
 ```
-5. Some key points are summaraized in note.txt
+5. Main key points are summaraized in note.txt
   
   
 
