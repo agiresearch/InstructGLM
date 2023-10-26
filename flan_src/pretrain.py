@@ -14,9 +14,9 @@ import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 import torch.backends.cudnn as cudnn
-#os.environ['CUDA_VISIBLE_DEVICES'] = "0,1,2,3"
+#os.environ['CUDA_VISIBLE_DEVICES'] = "0,1,2,3,4,5,6,7"
 from param import parse_args
-from pretrain_data import get_loader#, len_val
+from pretrain_data import get_loader
 from utils import LossMeter
 from dist_utils import reduce_dict, new_reduce_dict
 
@@ -30,57 +30,43 @@ from trainer_base import TrainerBase
 
 
 # The Trainer inherits TrainerBase in trainer_base.py
+# We didn't deploy fp16 training in our paper for Flan-T5 series backbones.
 class Trainer(TrainerBase):
-    def __init__(self, args, train_loader=None, val_loader=None, test_loader=None, train=True,val_list=None):
+    def __init__(self, args, train_loader=None, val_loader=None, test_loader=None, train=True, val_list=None):
         super().__init__(
             args,
             train_loader=train_loader,
             val_loader=val_loader,
             test_loader=test_loader,
-            train=train)   #实际上这里传进去的train没有用
+            train=train)   
 
-        ###assert args.whole_word_embed
-        from pretrain_model import P5Pretraining
-        #print()
-        #print(len(self.val_loader))
-        #print(len(self.val_loader.dataset))
-        #print()
-        #print(',,,mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm')
+        from pretrain_model import InstructGLM
 
         model_kwargs = {}
 
-        model_class = P5Pretraining
+        model_class = InstructGLM
 
         config = self.create_config()
         self.tokenizer = self.create_tokenizer()
         self.model = self.create_model(model_class, config, **model_kwargs)
 
-
-
-          #32128----->32100
-        self.model.resize_token_embeddings(self.tokenizer.vocab_size+169343)   #这个我肯定要用
+        self.model.resize_token_embeddings(self.tokenizer.vocab_size + 169343) # Extend the vocabulary of the LLM backbone. There are 169343 nodes in Arxiv Graph.
 
         self.model.tokenizer = self.tokenizer
 
-        # Load Checkpoint
-        self.start_epoch = None
-        if args.load is not None:        #不从这里进，保持None
-            ckpt_path = args.load + '.pth'
-            self.load_checkpoint(ckpt_path)
-            self.start_epoch = int(args.load.split('Epoch-')[-1])
-
-        # GPU Options
+        
         print(f'Model Launching at GPU {self.args.gpu}')
         if self.verbose:
             from time import time
             start = time()
 
-      #  ckpt_path="Aa256_nflan_s_2_0.0001_8_Arxiv_end.pth"
+      # For restart training if needed.
+      #  ckpt_path="your_restart_checkpoint_name.pth"
       #  self.load_checkpoint(ckpt_path)
-        self.model = self.model.to(args.gpu)
-##        self.model.lm_head.weight.data[-169343:]=self.train_loader.dataset.real_feature[-169343:].to(args.gpu)   #large的时候dim不匹配，可不能这么搞
 
-        # Optimizer
+        self.model = self.model.to(args.gpu)
+
+        # Optimizer: AdamW with weight decay at 0
         if train:
             self.optim, self.lr_scheduler = self.create_optimizer_and_scheduler()
 
@@ -90,31 +76,23 @@ class Trainer(TrainerBase):
                 self.model, self.optim = amp.initialize(
                     self.model, self.optim, opt_level='O1', verbosity=self.verbose)
 
-        #if self.args.train=='Cora':
-         #   self.model.shared.weight.requires_grad=False
-
-        if args.multiGPU and not args.inference:
+        if args.multiGPU and not args.inference:   #  DDP setup
             if args.distributed:
                 self.model = DDP(self.model, device_ids=[args.gpu])
-                                 #find_unused_parameters=True
-                                 #)
+
         if self.verbose:
             print(f'It took {time() - start:.1f}s')
 
         self.val_list=val_list
 
     def train(self):
-        LOSSES_NAME = self.args.LOSSES_NAME
-
-        if self.args.dry:       #从来不dry
-            results = self.evaluate_epoch()   
+        LOSSES_NAME = self.args.LOSSES_NAME  
 
         if self.verbose:
             loss_meters = [LossMeter() for _ in range(len(LOSSES_NAME))]
             best_eval_loss = 100000.
 
-            #if 't5' in self.args.backbone:
-            project_name = "P5_Pretrain"
+            project_name = "Natural Language is All a Graph Needs"
 
             src_dir = Path(__file__).resolve().parent
             base_path = str(src_dir.parent)
@@ -123,34 +101,32 @@ class Trainer(TrainerBase):
         if self.args.distributed:
             dist.barrier()
 
-        #global_step = 0
         for epoch in range(self.args.epoch):
             global_step=0
 
             if self.start_epoch is not None:
                 epoch += self.start_epoch
             if self.args.distributed:
-                self.train_loader.sampler.set_epoch(epoch)    #keep in mind this
+                self.train_loader.sampler.set_epoch(epoch)   
 
             # Train
-            self.model.train()     # 这里设置好了
+            self.model.train()    
 
             if self.verbose:
                 pbar = tqdm(total=len(self.train_loader), ncols=275)
 
-            epoch_results = {}    #per-epoch的
+            epoch_results = {}    # per-epoch
             for loss_name in LOSSES_NAME:
                 epoch_results[loss_name] = 0.
                 epoch_results[f'{loss_name}_count'] = 0
 
-            for step_i, batch in enumerate(self.train_loader):   #step_i可用来操作acc_step
+            for step_i, batch in enumerate(self.train_loader):   
                 dist.barrier()
 
                 if self.args.fp16 and _use_native_amp:
                     pass
                 else:
                     if self.args.distributed:
-                        #
                         dddd = next(self.model.parameters()).device
 
                         input_ids = batch['input_ids'].to(dddd)
@@ -158,10 +134,10 @@ class Trainer(TrainerBase):
 
                         loss_weights = batch["loss_weights"].to(dddd)
                         B, L = lm_labels.size()
-
-                        output = self.model(  #这里本质也是调用forward
+                         # forward
+                        output = self.model( 
                             input_ids=input_ids,
-                            real_feature=self.train_loader.dataset.real_feature.to(dddd),   
+                            real_feature=self.train_loader.dataset.real_feature.to(dddd), # The previous part of real_feature are all zero vectors.  
                             labels=lm_labels,
                             return_dict=True
                         )
@@ -171,13 +147,13 @@ class Trainer(TrainerBase):
 
                         loss = output['loss']
 
-                        loss = loss.view(B, L) * lm_mask   #注意一下loss的size
+                        loss = loss.view(B, L) * lm_mask  
 
-                        loss = loss.sum(dim=1) / lm_mask.sum(dim=1).clamp(min=1)   #这里之后变1维的了
+                        loss = loss.sum(dim=1) / lm_mask.sum(dim=1).clamp(min=1)   
 
-                        results = {}     #Real output for our model
+                        results = {}     
 
-                        results['loss'] = (loss * loss_weights).mean()    #这个loss_weight是per_batch(per_example)的
+                        results['loss'] = (loss * loss_weights).mean()   
                         results['total_loss'] = loss.detach().sum()
                         results['total_loss_count'] = len(loss)
 
@@ -192,8 +168,6 @@ class Trainer(TrainerBase):
                             if task_counts[task] > 0:
                                 results[f'{task}_loss'] = task_loss[task]
                                 results[f'{task}_loss_count'] = task_counts[task]
-
-                        #results = self.model.module.train_step(batch)
                     else:
                         results = self.model.train_step(batch)
 
@@ -206,8 +180,6 @@ class Trainer(TrainerBase):
                         scaled_loss.backward()
                 else:
                     loss.backward()
-
-                #print(self.model.module.encoder.embed_tokens(torch.tensor([586]).to(batch.device)).grad)
 
                 loss = loss.detach()
 
@@ -227,7 +199,7 @@ class Trainer(TrainerBase):
                         self.scaler.step(self.optim)
                         self.scaler.update()
                     else:
-                        self.optim.step()    #梯度更新
+                        self.optim.step()    # Update
 
                     if self.lr_scheduler:
                         self.lr_scheduler.step()
@@ -236,18 +208,16 @@ class Trainer(TrainerBase):
                         param.grad = None
 
                 global_step += 1
-                if epoch==0 and global_step in [-100]:
-                    if self.verbose:
-                        torch.save(self.model.state_dict(),"s_sp1_{}_8_{}_{}_mid_n_{}.pth".format(self.args.lr,self.args.train,self.args.weight_decay,global_step))
+                
                 if global_step==len(self.train_loader)//2:
                     if self.verbose:
-                        torch.save(self.model.state_dict(),"GtAa_nflan_s_{}_{}_8_{}_mid2.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.model.state_dict(),"GL_flan_{}_{}_8_{}_mid2.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)//4:
                     if self.verbose:
-                        torch.save(self.model.state_dict(),"GtAa_nflan_s_{}_{}_8_{}_mid1.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.model.state_dict(),"GL_flan_{}_{}_8_{}_mid1.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)*3//4:
                     if self.verbose:
-                        torch.save(self.model.state_dict(),"GtAa_nflan_s_{}_{}_8_{}_mid3.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.model.state_dict(),"GL_flan_{}_{}_8_{}_mid3.pth".format(epoch+1,self.args.lr,self.args.train))
 
                 dist.barrier()
 
@@ -258,27 +228,23 @@ class Trainer(TrainerBase):
                         lr = self.lr_scheduler.get_lr()[0]
                 else:
                     lr=self.optim.param_groups[-1]['lr']
-                    #try:
-                     #   lr = self.optim.get_lr()[0]
-                    #except AttributeError:
-                     #   lr = self.args.lr
 
-                for k, v in results.items():    #本project 标准写法
+                for k, v in results.items():   
                     if k in epoch_results:
                         if isinstance(v, int):
                             epoch_results[k] += v
                         elif isinstance(v, torch.Tensor):
                             epoch_results[k] += v.item()
 
-                if self.verbose and step_i % 1==0:       #问题是不是有可能出在这？
-                    desc_str = f'Epoch {epoch} | LR {lr:.6f} |'    #results是per-interation地产生的
+                if self.verbose and step_i % 1==0:      # Logging purpose
+                    desc_str = f'Epoch {epoch} | LR {lr:.6f} |'   
 
                     for i, (loss_name, loss_meter) in enumerate(zip(LOSSES_NAME, loss_meters)):
 
-                        if loss_name in results:   #看一下这两玩意的type，我能不能不累积，只打印该iteration的loss不就好了吗，拒绝append?
+                        if loss_name in results:   
                             loss_meter.update(results[f'{loss_name}'] / results[f'{loss_name}_count'])
                         if len(loss_meter) > 0:
-                            loss_count = epoch_results[f'{loss_name}_count']     #epoch_results具有累计性质
+                            loss_count = epoch_results[f'{loss_name}_count']   
                             desc_str += f' {loss_name} ({loss_count}) {loss_meter.val:.3f}'
 
                     pbar.set_description(desc_str)
@@ -290,7 +256,7 @@ class Trainer(TrainerBase):
 
             dist.barrier()
 
-            results = reduce_dict(epoch_results,average=False)    #Global信息拿到#
+            results = reduce_dict(epoch_results,average=False)    # Get Global information
 
             dist.barrier()
 
@@ -310,107 +276,56 @@ class Trainer(TrainerBase):
                             losses_str += f"{name} ({loss_count}): {avg_loss:.3f} "
 
                 losses_str += '\n'
-                print(losses_str)      #这个打印频率 once per epoch
+                print(losses_str)     # Print once per epoch
 
             dist.barrier()
 
-            if self.verbose:
-                
-                #if epoch+1==self.args.epoch:
-                #torch.save(self.model.state_dict(),'{}_pretrain_link.pth'.format(epoch+1))
-                torch.save(self.model.state_dict(),"GtAa_nflan_s_{}_{}_8_{}_end.pth".format(epoch+1,self.args.lr,self.args.train))
+            if self.verbose:  # Save checkpoint
+                torch.save(self.model.state_dict(),"GL_flan_{}_{}_8_{}_end.pth".format(epoch+1,self.args.lr,self.args.train))
 
             dist.barrier()
 
- ##           if epoch+1==self.args.epoch:     #关键代码,inference,
-                #把inference和train分离试试
 
 
-
- ##               valid_results = self.evaluate_epoch()#.to('cuda')  
- ##               dist.barrier()
-
-   ##             valid_results = new_reduce_dict(valid_results)   #
-    ##            dist.barrier()
-
-      ##          if self.verbose:
-        ##            print()
-          ##          print()
-            ##        for kk in valid_results.keys():#
-              ##          if kk.startswith('1'):
-                ##            valid_results[kk]=valid_results[kk].item()/self.val_loader.dataset.len_link[kk]
-                  ##      elif kk.endswith('inductive'):
-                    ##        valid_results[kk]=valid_results[kk].item()/self.val_loader.dataset.len_inductive[kk.rstrip('-inductive')]
-                      ##  elif kk.endswith('transductive'):
-                        ##    valid_results[kk]=valid_results[kk].item()/self.val_loader.dataset.len_transductive[kk.rstrip('-transductive')]
-                    ##print(valid_results)
-                   ## print()
-                    ##print()
-
-                ##dist.barrier()
-
-                #per-epoch地将测试结果写入一个txt文件
-                ##if self.verbose:
-                  ##  acc_file=open('acc.txt','a')
-                    ##acc_file.write(str(epoch+1)+'\n')
-                    ##acc_file.write(str(valid_results)+'\n\n')
-                    ##acc_file.close()
-                ##dist.barrier()
-            
-            
-
-    def test(self):   #没有封装DDP
-        special=[]
-        for epoch in [11]:#range(4*self.args.epoch):
-            #load 对应模型
-            #ckpt_path = "{}_{}_{}.pth".format(epoch+1,self.args.lr,self.args.world_size)  #GPU数目注意一下
-            if epoch<=-100:
-                spp=special[epoch]
-                ckpt_path="s_sp1_{}_8_{}_{}_mid_n_{}.pth".format(self.args.lr,self.args.train,self.args.weight_decay,spp)
-            elif (epoch+1)%4==1:
-                ckpt_path = "GtAa_nflan_s_{}_{}_8_{}_mid1.pth".format(epoch//4+1,self.args.lr,self.args.train) 
+    def test(self):   
+        for epoch in range(4*self.args.epoch):
+            if (epoch+1)%4==1:
+                ckpt_path = "GL_flan_{}_{}_8_{}_mid1.pth".format(epoch//4+1,self.args.lr,self.args.train) 
             elif (epoch+1)%4==2:
-                ckpt_path = "GtAa_nflan_s_{}_{}_8_{}_mid2.pth".format(epoch//4+1,self.args.lr,self.args.train) 
+                ckpt_path = "GL_flan_{}_{}_8_{}_mid2.pth".format(epoch//4+1,self.args.lr,self.args.train) 
             elif (epoch+1)%4==3:
-                ckpt_path = "GtAa_nflan_s_{}_{}_8_{}_mid3.pth".format(epoch//4+1,self.args.lr,self.args.train) 
+                ckpt_path = "GL_flan_{}_{}_8_{}_mid3.pth".format(epoch//4+1,self.args.lr,self.args.train) 
             else:
-                ckpt_path = "GtAa_nflan_s_{}_{}_8_{}_end.pth".format(epoch//4+1,self.args.lr,self.args.train)
-            ckpt_path='GAL_nflan_s_3_5e-05_8_Arxiv_end.pth'
+                ckpt_path = "GL_flan_{}_{}_8_{}_end.pth".format(epoch//4+1,self.args.lr,self.args.train)
+            
+            #One can directly assign the checkpoint here when testing.
+            #ckpt_path='xxx.pth'
 
             self.load_checkpoint(ckpt_path)
             self.model = self.model.to(self.args.gpu)
-            #
-            valid_results = self.evaluate_epoch()
+            
+            valid_results = self.evaluate_epoch()    # For accuracy
             dist.barrier()
 
-            valid_results = new_reduce_dict(valid_results)   #
+            valid_results = new_reduce_dict(valid_results)   
             dist.barrier()
 
             if self.verbose:
                 print()
                 print()
-                for kk in valid_results.keys():#
-                    if kk.startswith('1'):
-                        valid_results[kk]=valid_results[kk].item()/self.val_loader.dataset.len_link[kk]
-                    elif kk.endswith('inductive'):
-                        valid_results[kk]=valid_results[kk].item()/self.val_loader.dataset.len_inductive[kk.rstrip('-inductive')]
-                    elif kk.endswith('transductive'):
-                        if self.args.train=='Cora' or self.args.train=='Arxiv':
-                            valid_results[kk]=valid_results[kk].item()/self.val_loader.dataset.len_transductive
-                        else:
-                            valid_results[kk]=valid_results[kk].item()/self.val_loader.dataset.len_transductive[kk.rstrip('-transductive')]
+                for kk in valid_results.keys():
+                    if kk.endswith('transductive'):
+                        if self.args.train=='Arxiv':
+                            valid_results[kk]=valid_results[kk].item() / self.val_loader.dataset.len_transductive
                 print(valid_results)
                 print()
                 print()
 
             dist.barrier()
 
-                #per-epoch地将测试结果写入一个txt文件
             if self.verbose:
-                acc_file=open('GAL_nflan_s_5e-5.txt','a')                           #文件名字注意一下
-                if epoch<=-100:
-                    acc_file.write(str(spp)+'\n')
-                elif (epoch+1)%4==1:
+                acc_file=open('GLM_Flan_t5_Large.txt','a')                     
+                if (epoch+1)%4==1:
                     acc_file.write(str(epoch//4+1)+'_mid1'+'\n')
                 elif (epoch+1)%4==2:
                     acc_file.write(str(epoch//4+1)+'_mid2'+'\n')
@@ -418,88 +333,53 @@ class Trainer(TrainerBase):
                     acc_file.write(str(epoch//4+1)+'_mid3'+'\n')
                 else:
                     acc_file.write(str(epoch//4+1)+'_end'+'\n')
-                #acc_file.write(str(epoch+1)+'\n')
+
                 acc_file.write(str(valid_results)+'\n\n')
                 acc_file.close()
             dist.barrier()
 
 
-    def evaluate_epoch(self):    #关键代码#     per-template地给出acc, 其中classification的template给两acc
-        #得到一个字典：key: template-id(+cate), value:正确个数
+    def evaluate_epoch(self):   
         ACC={}
         for k in list(self.val_list.keys()):
             if k=='link':
-                templates=[]
-                for tems in self.val_list[k]:
-                    templates=templates+tems
-                for thing in templates:
-                    ACC[thing]=0
+                pass
             elif k=='classification':
-                if self.args.train=='Cora' or self.args.train=='Arxiv':
+                if self.args.valid=='Arxiv':
                     templates=[]
                     for tems in self.val_list[k]:
                         templates=templates+tems
                     for thing in templates:
                         ACC[thing+'-'+'transductive']=0
-                else:
-                    templates=[]
-                    for tems in self.val_list[k]:
-                        templates=templates+tems
-                    for thing in templates:
-                        ACC[thing+'-'+'inductive']=0
-                        ACC[thing+'-'+'transductive']=0
+
         self.model.eval()
         with torch.no_grad():
-            for step_i, batch in tqdm(enumerate(self.val_loader)):   #每张卡单独inference完毕后per_inference只做一次结果同步
+            for step_i, batch in tqdm(enumerate(self.val_loader)):   
 
                 if self.args.distributed:
                     results = self.model.g_step(batch,real=self.val_loader.dataset.real_feature)
-                else:
-                    results = self.model.g_step(batch)   #results为一个长度为B的list,元素类型为str
 
-                for iiid in range(len(results)):    #这里后期引入其他任务后还要改
+                for iiid in range(len(results)):    
                     task=batch['task'][iiid]
                     temp_id=batch['temp_ids'][iiid]
-                    if task=='classification':
-                        
-                        cate=batch['cate'][iiid] #无论如何batch都会传出cate
-                        if temp_id.endswith('2') or temp_id.endswith('4') or temp_id.endswith('6'):  #label, length may be greater than 1
-                            if results[iiid].lower()==batch['target_text'][iiid]:
-                                ACC[temp_id+'-'+cate]+=1
-                        else:   #yes-no
-                            focus=results[iiid].split(' ')[0]
-                            if focus.lower() in ('yes', 'true', 't', 'y'):
-                                ff=True
-                            elif focus.lower() in ('no', 'false', 'f', 'n'):
-                                ff=False
-                            else:
-                                ff=focus
-                            fff=True if batch['target_text'][iiid]=='yes' else False
-                            if ff==fff:
-                                ACC[temp_id+'-'+cate]+=1
 
+                    if task=='classification':
+                        cate=batch['cate'][iiid] 
+                        if temp_id.endswith('2') or temp_id.endswith('4') or temp_id.endswith('6'):  
+                            if results[iiid].lower() == batch['target_text'][iiid]: 
+                                #Check if the generated text strings is strictly matched with the label in natural language.
+                                ACC[temp_id+'-'+cate]+=1     
+                        else:   
+                            pass
                     elif task=='link':
-                        focus=results[iiid].split(' ')[0].lower()
-                        if temp_id.endswith('2') or temp_id.endswith('4'):  #id
-                            if focus==batch['target_text'][iiid]:
-                                ACC[temp_id]+=1
-                        else:     #yes-no
-                            if focus.lower() in ('yes', 'true', 't', 'y'):
-                                ff=True
-                            elif focus.lower() in ('no', 'false', 'f', 'n'):
-                                ff=False
-                            else:
-                                ff=focus
-                            fff=True if batch['target_text'][iiid]=='yes' else False
-                            if ff==fff:
-                                ACC[temp_id]+=1
+                        pass
 
                 dist.barrier()
 
-            return ACC   #ACC的value需要全部变成tensor并且to device, 最后还要同步前统一to cuda
+            return ACC   
 
 
-def main_worker(gpu, args):     # the gpu is the args.local_rank
+def main_worker(gpu, args):     # the gpu represents the local_rank
     args.gpu = gpu
     args.rank = gpu
     print(f'Process Launching at GPU {gpu}')
@@ -510,26 +390,21 @@ def main_worker(gpu, args):     # the gpu is the args.local_rank
 
     # define the prompts used in training
     if not args.inference:
-        print(f'Building train loader at GPU {gpu}')
-        if args.train == 'Cora':
+        print(f'Building train loader at GPU {gpu}')    # Train Consoles
+
+        # The '6-6-6-6' represents the graph-free instruction prompt. 
+        # All detailed instruction prompt lists are summarized in all_graph_templates.py and the appendix of our paper.
+
+        if args.train=='Arxiv':
             train_task_list = {
-            'link':[['1-1-1-1','1-1-1-2'],['1-1-2-1','1-1-2-2','1-1-2-3','1-1-2-4'],['1-1-3-1','1-1-3-2','1-1-3-3','1-1-3-4']],
-            'classification':[['2-1-1-1','2-1-1-2'],['2-1-2-1','2-1-2-2','2-1-2-3','2-1-2-4'],['2-1-3-1','2-1-3-2','2-1-3-3','2-1-3-4']]
-            }
-        elif args.train=='Arxiv':
-            train_task_list = {
-            'classification':[['6-6-6-6'],['2-1-1-2','2-3-1-2'],['2-1-2-2','2-1-2-4','2-3-2-2','2-3-2-4'],['2-1-3-2','2-1-3-4','2-3-3-2','2-3-3-4']]
-       #     'link':[['1-1-1-1','1-1-1-2','1-3-1-1','1-3-1-2']]#,['1-1-2-1','1-1-2-2','1-1-2-3','1-1-2-4','1-3-2-1','1-3-2-2','1-3-2-3','1-3-2-4'],['1-1-3-1','1-1-3-2','1-1-3-3','1-1-3-4','1-3-3-1','1-3-3-2','1-3-3-3','1-3-3-4']]
-            #'classification':[['5-5-5-5','6-6-6-6'],['2-1-1-1','2-1-1-2','2-3-1-1','2-3-1-2'],['2-1-2-1','2-1-2-2','2-1-2-3','2-1-2-4','2-3-2-1','2-3-2-2','2-3-2-3','2-3-2-4'],['2-1-3-1','2-1-3-2','2-1-3-3','2-1-3-4','2-3-3-1','2-3-3-2','2-3-3-3','2-3-3-4']]
+            'classification':[['6-6-6-6'],['2-1-1-2','2-3-1-2'],['2-1-2-2','2-1-2-4','2-3-2-2','2-3-2-4'],['2-1-3-2','2-1-3-4','2-3-3-2','2-3-3-4']],
+            'link':[['1-1-1-1','1-1-1-2','1-3-1-1','1-3-1-2'],['1-1-2-1','1-1-2-2','1-1-2-3','1-1-2-4','1-3-2-1','1-3-2-2','1-3-2-3','1-3-2-4'],['1-1-3-1','1-1-3-2','1-1-3-3','1-1-3-4','1-3-3-1','1-3-3-2','1-3-3-3','1-3-3-4']]
             }
         else:
-            train_task_list = {
-            'link':[['1-1-1-1','1-1-1-2','1-2-1-1','1-2-1-2'],['1-1-2-1','1-1-2-2','1-1-2-3','1-1-2-4','1-2-2-1','1-2-2-2','1-2-2-3','1-2-2-4'],['1-1-3-1','1-1-3-2','1-1-3-3','1-1-3-4','1-2-3-1','1-2-3-2','1-2-3-3','1-2-3-4']],
-            'classification':[['2-1-1-1','2-1-1-2','2-2-1-1','2-2-1-2'],['2-1-2-1','2-1-2-2','2-1-2-3','2-1-2-4','2-2-2-1','2-2-2-2','2-2-2-3','2-2-2-4'],['2-1-3-1','2-1-3-2','2-1-3-3','2-1-3-4','2-2-3-1','2-2-3-2','2-2-3-3','2-2-3-4']]
-            }
+            pass
 
-        train_sample_numbers = {}
-    #train_sample_numbers在我这根本没用到
+        train_sample_numbers = {} # Abandoned
+
         train_loader = get_loader(
             args,
             train_task_list,
@@ -543,27 +418,22 @@ def main_worker(gpu, args):     # the gpu is the args.local_rank
 
         if args.gpu==0:
             print('Length of train dataset:', len(train_loader.dataset))
-        trainer = Trainer(args,train_loader= train_loader,  train=True)    # Remember to set 'train' = True
+        trainer = Trainer(args,train_loader= train_loader,  train=True)  
         trainer.train()
-    # define the prompts used in validation
+
+
+    # define the prompts used in validation/ Test
     if args.inference:
-        print(f'Building val loader at GPU {gpu}')
-        if args.valid == 'Cora':
+        print(f'Building val loader at GPU {gpu}')         # Valid/ Test Consoles
+        # The '6-6-6-6' represents the graph-free instruction prompt. 
+        if args.valid=='Arxiv':
             val_task_list = {
-            ##3###3#33'link':[['1-1-1-1','1-1-1-2'],['1-1-2-1','1-1-2-2','1-1-2-3','1-1-2-4'],['1-1-3-1','1-1-3-2','1-1-3-3','1-1-3-4']],
-            'classification':[['2-1-1-1','2-1-1-2'],['2-1-2-1','2-1-2-2','2-1-2-3','2-1-2-4'],['2-1-3-1','2-1-3-2','2-1-3-3','2-1-3-4']]
+            #'classification':[['6-6-6-6'],['2-1-1-2','2-3-1-2'],['2-1-2-2','2-1-2-4','2-3-2-2','2-3-2-4'],['2-1-3-2','2-1-3-4','2-3-3-2','2-3-3-4']]
+            'classification':[['2-3-1-2'],['6-6-6-6']]  
             }
-        elif args.valid=='Arxiv':
-            val_task_list = {
-            #'classification':[['5-5-5-5','6-6-6-6'],['2-1-1-1','2-1-1-2','2-3-1-1','2-3-1-2'],['2-1-2-1','2-1-2-2','2-1-2-3','2-1-2-4','2-3-2-1','2-3-2-2','2-3-2-3','2-3-2-4'],['2-1-3-1','2-1-3-2','2-1-3-3','2-1-3-4','2-3-3-1','2-3-3-2','2-3-3-3','2-3-3-4']]
-            'classification':[['2-3-1-2','2-1-1-2'],['6-6-6-6']]#,['2-1-2-2','2-1-2-4','2-3-2-2','2-3-2-4'],['2-1-3-2','2-1-3-4','2-3-3-2','2-3-3-4']]
-            }
-        else:
-            val_task_list = {
-            'link':[['1-1-1-1','1-1-1-2','1-2-1-1','1-2-1-2'],['1-1-2-1','1-1-2-2','1-1-2-3','1-1-2-4','1-2-2-1','1-2-2-2','1-2-2-3','1-2-2-4'],['1-1-3-1','1-1-3-2','1-1-3-3','1-1-3-4','1-2-3-1','1-2-3-2','1-2-3-3','1-2-3-4']],
-            'classification':[['2-1-1-1','2-1-1-2','2-2-1-1','2-2-1-2'],['2-1-2-1','2-1-2-2','2-1-2-3','2-1-2-4','2-2-2-1','2-2-2-2','2-2-2-3','2-2-2-4'],['2-1-3-1','2-1-3-2','2-1-3-3','2-1-3-4','2-2-3-1','2-2-3-2','2-2-3-3','2-2-3-4']]
-            }
-        val_sample_numbers = {}
+
+        val_sample_numbers = {} # Abandoned
+
         val_loader = get_loader(
             args,
             val_task_list,
@@ -600,18 +470,10 @@ if __name__ == "__main__":
 
     comments = []
     dsets = []
-    if 'toys' in args.train:
-        dsets.append('toys')
-    if 'beauty' in args.train:
-        dsets.append('beauty')
-    if 'sports' in args.train:
-        dsets.append('sports')
-    if 'Cora' in args.train:
-        dsets.append('Cora')
     if 'Arxiv' in args.train:
         dsets.append('Arxiv')
     comments.append(''.join(dsets))
-    #if args.backbone:
+
     comments.append(args.backbone)
     comments.append(''.join(args.losses.split(',')))
     if args.comment != '':

@@ -1,0 +1,28 @@
+# This file contains some key notes and implementations.
+
+1. We use a simple MLP to perform dimension transformation for node embedding. 
+   For example, we map GIANT (768) to Llama-7b embedding size (4096).
+   Such an MLP can also be viewed as a semantic adapter that transform the original numerical node embedding into the LLM's semantic space.
+
+2. For tokenization, it is worth noting that we didn't expand the tokenizer.
+   i.e. We don't add new node token for the tokenizer, such an implementation is not scalable since it will seriously slow down the tokenization process.
+   Instead, we use a fixed special token '<extra_id_0>' as a place holder during tokenization.
+   '<extra_id_0>' will occupy all the positions of node tokens in the natural language text while real node token IDs are recorded accordingly.
+   Then the encoded input_ids will be correctly modified according to the real node IDs, such an engineering operation can greatly speed up the pipeline, especially when the graph is large.
+   Details can be founded in arxiv.py where the graph structure description sentences are formed.
+
+3. In terms of the instruction tuning: 
+   For Arxiv & Pubmed, we achieve the best results by firstly double the node example per epoch and perform graph-free tuning for 2 epochs with lr 8e-5,
+   then we select the best one via validation and further add self-supervised prompts and multi-hop structure description prompts for 2 more epochs training with lr 3e-5.
+   However, for Cora we find that fuse graph-free prompt/ multi-hop structure prompts/ link prediction prompts from the very beginning of training will converge to the best results.
+
+4. For Flan-t5 series models (fine-tune), we extend both the input embedding vocabulary and the final lm_head, thus Flan-t5 supports both generative and discriminative link prediction prompts.
+   For Llama-7b (LoRA), we only extend the input embedding vocabulary (i.e. first_model), thus llama-7b only supports discriminative link prediction prompts.
+
+5. For checkpoint saving and loading in Llama, we provide 2 different ways and corresponding checkpoint. 
+   If the single GPU memory is smaller than 25G, the way we explicitly code in the existing files can help avoid CUDA out of memory.
+
+6. We provide *.sh files to perform training/inference in ./scripts
+   In addition to the tunable args in the *.sh files, 
+   it is also convenient to select the prompts used for training/val/test via the consoles in main_worker function in pretrain.py
+   and control the example amount for a single epoch & the example distribution ratio between different types of prompts in arxiv.py (grouped by task type & hop-level).

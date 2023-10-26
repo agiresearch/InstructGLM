@@ -6,7 +6,7 @@ import collections
 import logging
 
 
-class LossMeter(object):
+class LossMeter(object):   # Logging purpose
     def __init__(self, maxlen=100):
         """Computes and stores the running average"""
         self.vals = collections.deque([], maxlen=maxlen)

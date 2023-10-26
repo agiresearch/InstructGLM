@@ -1,7 +1,7 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-name=arxiv-base
+name=arxiv-7b
 
 output=snap/$name
 
@@ -23,8 +23,8 @@ python -m torch.distributed.launch \
         --losses 'link,classification' \
         --backbone './7B' \
         --output $output ${@:2} \
-        --epoch 3 \
+        --epoch 2 \
 	--weight_decay 0 \
-        --max_text_length 512 \
+        --max_text_length 2048 \
         --gen_max_length 64 \
 	--lr 0.00008

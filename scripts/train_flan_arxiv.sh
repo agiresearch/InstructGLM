@@ -1,7 +1,7 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-name=arxiv-base
+name=arxiv-large
 
 output=snap/$name
 
@@ -23,7 +23,7 @@ python -m torch.distributed.launch \
         --losses 'link,classification' \
         --backbone 'google/flan-t5-large' \
         --output $output ${@:2} \
-        --epoch 3 \
+        --epoch 2 \
 	--weight_decay 0 \
         --max_text_length 512 \
         --gen_max_length 64 \

@@ -234,7 +234,7 @@ def shared_random_seed():
     return all_ints[0]
 
 
-def reduce_dict(input_dict, average=True):
+def reduce_dict(input_dict, average=True):   # We mainly use this for our paper.
     """
     Reduce the values in the dictionary from all processes so that process with rank
     0 has the reduced results.
@@ -275,7 +275,7 @@ def reduce_dict(input_dict, average=True):
     return reduced_dict
 
 
-def new_reduce_dict(input_dict):
+def new_reduce_dict(input_dict):  # We mainly use this for our paper.
     world_size = get_world_size()
     if world_size < 2:
         return input_dict

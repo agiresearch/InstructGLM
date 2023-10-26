@@ -29,7 +29,7 @@ num_heads)`.
 logger = logging.get_logger(__name__)
 
 # The encoder for input token sequence
-class JointEncoder(T5Stack):  # not single block, but the entire Encoder， 从T5Stack起步
+class JointEncoder(T5Stack):  
     def __init__(self, config, embed_tokens=None):
         super(T5Stack, self).__init__(config)
         self.config = config
@@ -44,11 +44,10 @@ class JointEncoder(T5Stack):  # not single block, but the entire Encoder， 从T
         self.dropout = nn.Dropout(config.dropout_rate)
 
 
-        self.trans_3=nn.Linear(768,1024,bias=False)
-        self.trans_1=nn.Linear(768,256,bias=False)  #这里映射要不搞复杂点
+        self.trans_3=nn.Linear(768,1024,bias=False)  # Newly added simple MLP inside the encoder to perform dimension transformation for the OGB/ GIANT node embedding. 
+        self.trans_1=nn.Linear(768,256,bias=False)  
         self.trans_2=nn.Linear(256,1024,bias=False)
-##        self.trans=nn.Linear(768,1024,bias=False)
-     ##3   self.trans=nn.Linear(768,768,bias=False)
+
         self.rac=nn.ELU()
         self.sln=nn.LayerNorm(256)
 
@@ -106,22 +105,24 @@ class JointEncoder(T5Stack):  # not single block, but the entire Encoder， 从T
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
 
-        if inputs_embeds is None:
-            #assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
 
-            #if real_feature is not None:
-            transfered=self.trans_2(self.rac(self.sln(self.trans_1(real_feature)))) + self.trans_3(real_feature)  #为了做好映射，需要将real_feature倒顺序进入nn.Linear
-  ###          transfered=self.trans(real_feature)
+
+
+
+        if inputs_embeds is None:   # From input_ids to Embedding.
+
+            transfered=self.trans_2(self.rac(self.sln(self.trans_1(real_feature)))) + self.trans_3(real_feature)  
+
             inputs_embeds=transfered[input_ids]
-                #self.embed_tokens.weight.data[-2708:]=transfered   #这里目前确实是dataset-specific的
 
-            ###
-##            self.embed_tokens.weight.data[-169343:]=torch.zeros(169343,1024).to(input_ids.device)
             self.embed_tokens.weight.data[-169343:]=torch.zeros(169343,1024).to(input_ids.device)
-###            self.embed_tokens.weight.data[-169343:]=real_feature.to(input_ids.device)
-            inputs_embeds =self.embed_tokens(input_ids)+inputs_embeds ### embedding step - add HERE ###
-           # self.embed_tokens.weight.data[-169343:]=transfered[-169343:]
-  #      self.lm_head.weight.data[-169343:]=transfered[-169343:]
+
+            inputs_embeds =self.embed_tokens(input_ids) + inputs_embeds ### embedding step - add HERE ###
+            self.embed_tokens.weight.data[-169343:]=transfered[-169343:]
+
+
+
+
 
         batch_size, seq_length = input_shape
 
@@ -132,9 +133,15 @@ class JointEncoder(T5Stack):  # not single block, but the entire Encoder， 从T
             if not self.is_decoder:
                 raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
-        if attention_mask is None:
+
+
+        if attention_mask is None:  # Encoder Attention Mask
+
             attention_mask = input_ids.ne(self.config.pad_token_id).to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
        #     attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+
+
+
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
             encoder_seq_length = encoder_hidden_states.shape[1]
             encoder_attention_mask = torch.ones(
@@ -295,11 +302,11 @@ class JointEncoder(T5Stack):  # not single block, but the entire Encoder， 从T
         )
 
 
-class P5(T5ForConditionalGeneration):
+class GLM(T5ForConditionalGeneration):
     _keys_to_ignore_on_load_missing = [    
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
-        #r"lm_head\.weight",
+        #r"lm_head\.weight",               In Flan-T5, embeds_tokens is decoupled with the final lm_head
     ]
     _keys_to_ignore_on_load_unexpected = [
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
@@ -360,16 +367,6 @@ class P5(T5ForConditionalGeneration):
     ):
 
 
-        
-
-        #return P5Seq2SeqLMOutput(
-         #   loss=loss,
-          #  logits=lm_logits,
-           # past_key_values=decoder_outputs.past_key_values,
-            #decoder_last_hidden_state=decoder_outputs.last_hidden_state,
-            #decoder_hidden_states=decoder_outputs.hidden_states,
-        #)
-
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -421,7 +418,7 @@ class P5(T5ForConditionalGeneration):
                 decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
         
         if attention_mask is None:
-            #
+            # Attention Mask
             attention_mask = input_ids.ne(self.config.pad_token_id).to(dtype=hidden_states.dtype, device=hidden_states.device)
 
         # Decode
@@ -482,60 +479,3 @@ class P5(T5ForConditionalGeneration):
         )
 
         
-
-
-
-    
-
-
-@dataclass
-class P5Seq2SeqLMOutput(ModelOutput):
-    """
-    Base class for sequence-to-sequence language models outputs.
-
-    Args:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Languaged modeling loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`,  with each tensor of shape
-            :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
-
-            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
-            used (see ``past_key_values`` input) to speed up sequential decoding.
-        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    decoder_last_hidden_state: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
