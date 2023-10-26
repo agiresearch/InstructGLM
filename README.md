@@ -15,7 +15,7 @@ This repo presents implementation of the **InstructGLM** and provide a natural l
 
 ## Introduction
 
-We introduce our proposed **Instruct**ion-finetuned **G**raph **L**anguage **M**odel, i.e. **InstructGLM**, a framework utilizing natural language to describe both graph structure and node features to a generative large language model and further addresses graph-related problems by instruction-tuning, which provides a powerful natural language processing interface for graph machine learning problems.
+We introduce our proposed **Instruct**ion-finetuned **G**raph **L**anguage **M**odel, i.e. **InstructGLM**, a framework utilizing natural language to describe both graph structure and node features to a generative large language model and further addresses graph-related problems by instruction-tuning, which provides a powerful natural language processing interface for graph machine learning.
 
 ## Usage
 
@@ -61,7 +61,7 @@ Here *8* means using 8 GPUs to conduct parallel instruction tuning with DDP.
 bash scripts/test_llama.sh 8
 
 ```
-5. Main key points are summaraized in note.txt
+5. Main key points are summarized in note.txt
   
   
 
