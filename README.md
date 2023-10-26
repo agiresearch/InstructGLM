@@ -93,4 +93,4 @@ Please cite the following paper corresponding to the repository:
 
   
 
-[TAPE](https://github.com/XiaoxinHe/TAPE), [GIANT](https://github.com/amzn/pecos/tree/mainline/examples/giant-xrt), [OGB](https://ogb.stanford.edu/docs/home/) and [Planetoid](https://arxiv.org/pdf/1603.08861.pdf)
+[TAPE](https://github.com/XiaoxinHe/TAPE), [GIANT](https://github.com/amzn/pecos/tree/mainline/examples/giant-xrt), [OGB](https://ogb.stanford.edu/docs/home/), [P5](https://github.com/jeykigung/P5), and [Planetoid](https://arxiv.org/pdf/1603.08861.pdf)
