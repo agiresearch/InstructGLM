@@ -1,0 +1,43 @@
+# Today for discussion (2-20)
+
+1. 'different batch for different tasks in Turn, I should rewrite sampler for DDP'
+
+2. '512, as long as possible , actually according to GraphSAGE, sampling beneficial."
+
+3. 'I think I still need to use "candidate items" for task 1 and 3'
+
+4. 数字部分，tokenizer随机初始化,有道理
+
+Because: (train)
+     
+    ground truth set of node_{1}: [2,3,4,5,6,7,8,9,10,11,12], in which 10,11,12 is split into test data as target
+
+     input:
+
+     Node_{1234} is linked with {2,3,4,5,6,7} within 1 hop with corresponding edge feature: {...}. 
+     What other node should be linked with node_{1} within 1 hop? 
+
+200
+1
+14
+     gt: {9}
+
+
+     (inference)
+    
+    input: same as above
+
+    output: 9  (groud truth set) 10,11,12
+
+    I think I should not consider it is a good answer  (It is correct but not good)
+
+
+     <node_1230>
+     node_ 12 30
+
+
+     1.link prediction
+     2. node classiication 
+     3.intermediate 
+     4.simple query
+     
