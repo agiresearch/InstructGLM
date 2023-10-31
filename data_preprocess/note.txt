@@ -1,1 +1,1 @@
-The required .tsv and .csv files and giant.pkl should be downloaded according to the google drive link in README
+The required *.tsv files, *.csv files and giant.pkl should be downloaded according to the google drive link in README
