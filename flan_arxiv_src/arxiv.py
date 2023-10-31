@@ -60,15 +60,15 @@ class Arxiv_Dataset(Dataset):
         ## Task specific prefix/instruction
         self.prefix_1='Perform Link Prediction for the node: Node represents academic paper with a specific topic, link represents a citation between the two papers. Pay attention to the multi-hop link relationship between the nodes. '
         self.prefix_2='Categorize the article by topic: Node represents academic paper with a specific topic, link represents a citation between the two papers. Pay attention to the multi-hop link relationship between the nodes. '
-        self.label_map=load_pickle(os.path.join('Arxiv','data','label_map.pkl'))  #1  Map node IDs to category text.
-        self.re_id=load_pickle(os.path.join('Arxiv','data','re_id.pkl'))  #2 Map node IDs to new index IDs in the extended LLM vocabulary. 
+        self.label_map=load_pickle(os.path.join('Arxiv','label_map.pkl'))  #1  Map node IDs to category text.
+        self.re_id=load_pickle(os.path.join('Arxiv','re_id.pkl'))  #2 Map node IDs to new index IDs in the extended LLM vocabulary. 
         self.l_max=self.args.max_text_length   #If the GPU memory is big enough, suggesting assign the LLM's max token limit to this variable.
-        self.real_feature=load_pickle(os.path.join('Arxiv','data','L_giant.pkl')) #3 Preprocessed Numerical Node Feature Embedding
-        self.train_L1=load_pickle(os.path.join('Arxiv','data','L1.pkl'))  
+        self.real_feature=load_pickle(os.path.join('Arxiv','L_giant.pkl')) #3 Preprocessed Numerical Node Feature Embedding
+        self.train_L1=load_pickle(os.path.join('Arxiv','L1.pkl'))  
         #4 1-hop Neighbor list for every node, we don't generate and keep corresponding 2/3-hop neighbor lists in advance for efficiency.
-        self.transductive=load_pickle(os.path.join('Arxiv','data','transductive.pkl'))  #5 a list, store test (transductive.pkl)/ val (val.pkl) node ID
-        self.classification=load_pickle(os.path.join('Arxiv','data','classification.pkl'))  #6 store train node ID
-        self.node_feature=load_pickle(os.path.join('Arxiv','data','node_feature.pkl'))  #7 store nodes' raw text feature(e.g. title/ abstract)
+        self.transductive=load_pickle(os.path.join('Arxiv','transductive.pkl'))  #5 a list, store test (transductive.pkl)/ val (val.pkl) node ID
+        self.classification=load_pickle(os.path.join('Arxiv','classification.pkl'))  #6 store train node ID
+        self.node_feature=load_pickle(os.path.join('Arxiv','node_feature.pkl'))  #7 store nodes' raw text feature(e.g. title/ abstract)
 
         LA=[]
         LAA=list(set(self.label_map.values()))
