@@ -5,11 +5,11 @@ name=arxiv-large
 
 output=snap/$name
 
-PYTHONPATH=$PYTHONPATH:./flan_src \
+PYTHONPATH=$PYTHONPATH:./flan_arxiv_src \
 python -m torch.distributed.launch \
     --nproc_per_node=$1 \
     --master_port 12321 \
-    flan_src/pretrain.py \
+    flan_arxiv_src/pretrain.py \
         --distributed --multiGPU \
         --seed 42 \
 	--gradient_accumulation_steps 4 \

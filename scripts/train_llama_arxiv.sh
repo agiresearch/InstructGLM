@@ -5,11 +5,11 @@ name=arxiv-7b
 
 output=snap/$name
 
-PYTHONPATH=$PYTHONPATH:./llama_src \
+PYTHONPATH=$PYTHONPATH:./llama_arxiv_src \
 python -m torch.distributed.launch \
     --nproc_per_node=$1 \
     --master_port 12321 \
-    llama_src/pretrain.py \
+    llama_arxiv_src/pretrain.py \
         --distributed --multiGPU \
         --seed 42 \
 	--gradient_accumulation_steps 8 \

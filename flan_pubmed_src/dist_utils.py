@@ -25,7 +25,7 @@ def get_world_size() -> int:
         return 1
     if not dist.is_initialized():
         return 1
-    return dist.get_world_size()   #好方法
+    return dist.get_world_size()   
 
 
 def get_rank() -> int:
@@ -282,11 +282,10 @@ def new_reduce_dict(input_dict):
 
     with torch.no_grad():
 
-        # Convert to CUDA Tensor for dist.reduce()
         input_dict_cuda_vals = {}
         for k, v in input_dict.items():
             if type(v) == torch.Tensor:
-                input_dict_cuda_vals[k] = v.to('cuda')  #这该不会to到一张卡上去了吧,并没有,放心吧
+                input_dict_cuda_vals[k] = v.to('cuda')  
             else:
                 input_dict_cuda_vals[k] = torch.tensor(v, device='cuda')
 

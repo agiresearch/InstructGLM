@@ -36,7 +36,7 @@ class TrainerBase(object):#
         self.val_loader = val_loader
         self.test_loader = test_loader
 
-        self.verbose = True       #只有主GPU的verbose == True
+        self.verbose = True    
         if self.args.distributed:
             if self.args.gpu != 0:
                 self.verbose = False
@@ -47,7 +47,6 @@ class TrainerBase(object):#
     def create_config(self):
         from transformers import T5Config
 
-        #if 't5' in self.args.backbone:
         config_class = T5Config
  
 
@@ -70,18 +69,15 @@ class TrainerBase(object):#
         model_name = self.args.backbone
 
         model = model_class.from_pretrained(
-            model_name,#s
+            model_name,
             config=config,
             **kwargs
         )
         return model
 
     def create_tokenizer(self, **kwargs):
-        from transformers import T5Tokenizer, T5TokenizerFast
+        from transformers import T5TokenizerFast
 
-        #if 'p5' in self.args.tokenizer:
-         #   tokenizer_class = P5Tokenizer
-          #  if self.args.train=='Cora' or self.args.train=='Arxiv':
         tokenizer_class = T5TokenizerFast
 
         tokenizer_name = self.args.backbone
@@ -130,7 +126,7 @@ class TrainerBase(object):#
             optim = AdamW(optimizer_grouped_parameters,
                           lr=self.args.lr, eps=self.args.adam_eps)
 #            lr_scheduler = get_linear_schedule_with_warmup(
- #               optim, warmup_iters, t_total)   #其实我只需要调整t_total就能'欺骗'scheduler使得lr不降到0
+ #               optim, warmup_iters, t_total)   
 
         else:
             optim = self.args.optimizer(
@@ -140,7 +136,7 @@ class TrainerBase(object):#
 
     def load_checkpoint(self, ckpt_path):
         state_dict = load_state_dict(ckpt_path, 'cpu')
-        results = self.model.load_state_dict(state_dict, strict=True)   #这儿我改了
+        results = self.model.load_state_dict(state_dict, strict=True)  
         if self.verbose:
             print('Model loaded from ', ckpt_path)
             pprint(results)

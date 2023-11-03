@@ -1,17 +1,16 @@
-# Run with $ bash scripts/pretrain_P5_base_beauty.sh 2
-
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=6,7
+
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
 name=arxiv-base
 
 output=snap/$name
 
-PYTHONPATH=$PYTHONPATH:./cora_flan_src \
+PYTHONPATH=$PYTHONPATH:./flan_cora_src \
 python -m torch.distributed.launch \
     --nproc_per_node=$1 \
     --master_port 12322 \
-    cora_flan_src/pretrain.py \
+    flan_cora_src/pretrain.py \
         --distributed --multiGPU \
         --seed 42 \
 	--gradient_accumulation_steps 1 \
@@ -30,4 +29,4 @@ python -m torch.distributed.launch \
 	--weight_decay 0 \
         --max_text_length 512 \
         --gen_max_length 64 \
-	--lr 0.00008
+	--lr 0.00001

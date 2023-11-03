@@ -56,7 +56,7 @@ Here *8* means using 8 GPUs to conduct parallel instruction tuning with DDP.
 
 ```
 
-bash scripts/test_llama.sh 8
+bash scripts/test_llama_arxiv.sh 8
 
 ```
 5. Main key points are summarized in note.txt

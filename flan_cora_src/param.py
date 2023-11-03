@@ -65,7 +65,7 @@ def parse_args(parse=True, **optional_kwargs):
 
     # Checkpoint
     parser.add_argument('--output', type=str, default='snap/pretrain')
-    parser.add_argument('--load', type=str, default=None, help='Load the model (usually the fine-tuned model).')
+    parser.add_argument('--load', type=str, default=None, help='abandoned')
     parser.add_argument('--from_scratch', action='store_true')
     parser.add_argument('--inference', action='store_true')
 
@@ -77,28 +77,28 @@ def parse_args(parse=True, **optional_kwargs):
     parser.add_argument('--local_rank', type=int, default=-1)
 
     # Model Config
-    parser.add_argument('--backbone', type=str, default='t5-base')
-    parser.add_argument('--tokenizer', type=str, default='p5')
-    parser.add_argument('--whole_word_embed', action='store_true')
+    parser.add_argument('--backbone', type=str, default='google/flan-t5-base')
+    parser.add_argument('--tokenizer', type=str, default='T5TokenizerFast')
+    parser.add_argument('--whole_word_embed', action='store_true') # abandoned
 
-    parser.add_argument('--max_text_length', type=int, default=128)
+    parser.add_argument('--max_text_length', type=int, default=512)
 
     # Training
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--valid_batch_size', type=int, default=None)
     parser.add_argument('--optim', default='adamw')
     parser.add_argument('--warmup_ratio', type=float, default=0.05)
-    parser.add_argument('--weight_decay', type=float, default=0.01)    #这个可以调
+    parser.add_argument('--weight_decay', type=float, default=0.0)   
     parser.add_argument('--clip_grad_norm', type=float, default=-1.0)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
-    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--lr', type=float, default=8e-5)
     parser.add_argument('--adam_eps', type=float, default=1e-8)
     parser.add_argument('--adam_beta1', type=float, default=0.9)
     parser.add_argument('--adam_beta2', type=float, default=0.999)
     parser.add_argument('--epoch', type=int, default=10)
     parser.add_argument('--dropout', type=float, default=0.1)
 
-    parser.add_argument("--losses", default='rating,sequential,review,metadata,recommend', type=str)
+    parser.add_argument("--losses", default='link,classification', type=str)
     parser.add_argument('--log_train_accuracy', action='store_true')
 
     # Inference

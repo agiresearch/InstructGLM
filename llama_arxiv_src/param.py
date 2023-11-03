@@ -65,7 +65,7 @@ def parse_args(parse=True, **optional_kwargs):
 
     # Checkpoint
     parser.add_argument('--output', type=str, default='snap/pretrain')
-    parser.add_argument('--load', type=str, default=None, help='Load the model (usually the fine-tuned model).')
+    parser.add_argument('--load', type=str, default=None, help='Abandoned')
     parser.add_argument('--from_scratch', action='store_true')
     parser.add_argument('--inference', action='store_true')
 
