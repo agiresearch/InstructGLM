@@ -1,23 +1,22 @@
-# Run with $ bash scripts/pretrain_P5_base_beauty.sh 2
-
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=0,1,2,3
 
-name=arxiv-base
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+
+name=cora-7b
 
 output=snap/$name
 
-PYTHONPATH=$PYTHONPATH:./llama_src_Cora \
+PYTHONPATH=$PYTHONPATH:./llama_cora_src \
 python -m torch.distributed.launch \
     --nproc_per_node=$1 \
     --master_port 12321 \
-    llama_src_Cora/pretrain.py \
+    llama_cora_src/pretrain.py \
         --distributed --multiGPU \
         --seed 42 \
 	--gradient_accumulation_steps 8 \
         --train Cora \
         --valid Cora \
-        --batch_size 3 \
+        --batch_size 4 \
         --optim adamw \
         --warmup_ratio 0.05 \
         --num_workers 8 \
@@ -25,9 +24,9 @@ python -m torch.distributed.launch \
         --losses 'classification' \
         --backbone './7B' \
         --output $output ${@:2} \
-        --epoch 3 \
+        --epoch 2 \
 	--inference \
 	--weight_decay 0 \
         --max_text_length 512 \
         --gen_max_length 64 \
-	--lr 0.00007
+	--lr 0.00008
