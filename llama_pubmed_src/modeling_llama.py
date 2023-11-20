@@ -16,21 +16,13 @@ from transformers.modeling_utils import PreTrainedModel, find_pruneable_heads_an
 from transformers.utils import logging
 from transformers import BeamScorer, BeamSearchScorer
 
-#注意这里super的用法
 logger = logging.get_logger(__name__)
 
 
-class P5(LlamaForCausalLM):
+class GLM(LlamaForCausalLM):
 
     def __init__(self, config):
         super().__init__(config)
-  
- #   def forward(
-  #      self,
-   #     real_feature=None,  # 
-
-    #    head_mask=None,
-    #):
 
     def forward(
         self,
@@ -45,7 +37,7 @@ class P5(LlamaForCausalLM):
         output_hidden_states= None,
         return_dict= None,
     ):
-        #
+        
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

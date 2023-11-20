@@ -1,7 +1,7 @@
 from fileinput import lineno
 from platform import node
-import re#
-from urllib.parse import urldefrag ##
+import re
+from urllib.parse import urldefrag 
 from torch.utils.data import DataLoader, Dataset, Sampler
 from pathlib import Path
 from collections import defaultdict
@@ -41,8 +41,8 @@ def parse(path):
 
     
 
-class Arxiv_Dataset(Dataset):
-    def __init__(self, all_tasks, task_list, tokenizer, args, sample_numbers, mode='train', split='toys', rating_augment=False, sample_type='random'): 
+class PubMed_Dataset(Dataset):
+    def __init__(self, all_tasks, task_list, tokenizer, args, sample_numbers, mode='train', split='', rating_augment=False, sample_type='random'): 
         self.all_tasks = all_tasks    #i.e. all templates
         self.task_list = task_list
         self.tokenizer = tokenizer
@@ -56,17 +56,19 @@ class Arxiv_Dataset(Dataset):
         print('Data sources: ', split.split(','))
         self.mode = mode
         self.prefix_1='Perform Link Prediction for the node: Node represents academic paper with a specific topic, link represents a citation between the two papers. Pay attention to the multi-hop link relationship between the nodes. '
-        #self.prefix_2='Categorize the article by topic: Node represents academic paper with a specific topic, link represents a citation between the two papers. Pay attention to the multi-hop link relationship between the nodes. '
+       
         self.prefix_2='Classify the article according to its topic into one of the following categories: [ experimental, second, first ]. Node represents academic paper with a specific topic, link represents a citation between the two papers. Pay attention to the multi-hop link relationship between the nodes. '
-        self.label_map=load_pickle(os.path.join('PubMed','my_data','final_pub_label_map.pkl'))  #1
-        self.re_id=load_pickle(os.path.join('PubMed','my_data','Llama_final_pub_re_id.pkl'))  #2   change
-        self.llama_embed=load_pickle(os.path.join('PubMed','my_data','Llama_embeds.pkl'))  #add.
-        self.l_max=612#self.args.max_text_length + 60
-        self.real_feature=load_pickle(os.path.join('PubMed','my_data','Llama_final_norm_pub_real_feature.pkl')) #3 change
-        self.train_L1=load_pickle(os.path.join('PubMed','my_data','final_pub_L1.pkl'))  #4
-        self.transductive=load_pickle(os.path.join('PubMed','my_data','big_final_pub_transductive.pkl'))  #6 a list
-        self.classification=load_pickle(os.path.join('PubMed','my_data','big_final_pub_classification.pkl'))  #7
-        self.node_feature=load_pickle(os.path.join('PubMed','my_data','full_final_pubmed_node_feature.pkl'))  #8
+        self.label_map=load_pickle(os.path.join('PubMed','final_pub_label_map.pkl'))  #1
+        self.re_id=load_pickle(os.path.join('PubMed','Llama_final_pub_re_id.pkl'))  #2   
+        self.llama_embed=load_pickle(os.path.join('PubMed','Llama_embeds.pkl'))  #3
+        self.l_max=self.args.max_text_length
+        self.real_feature=load_pickle(os.path.join('PubMed','Llama_final_norm_pub_real_feature.pkl')) #4
+        self.train_L1=load_pickle(os.path.join('PubMed','final_pub_L1.pkl'))  #5
+        self.transductive=load_pickle(os.path.join('PubMed','final_pub_transductive.pkl'))  #6 
+        #self.transductive=load_pickle(os.path.join('PubMed','small_pub_transductive.pkl'))  #6 
+        self.classification=load_pickle(os.path.join('PubMed','final_pub_classification.pkl'))  #7
+        #self.classification=load_pickle(os.path.join('PubMed','small_pub_classification.pkl'))  #7
+        self.node_feature=load_pickle(os.path.join('PubMed','full_final_pubmed_node_feature.pkl'))  #8
 
         LA=[]
         LAA=list(set(self.label_map.values()))
@@ -79,13 +81,12 @@ class Arxiv_Dataset(Dataset):
         self.total_length = 0
         self.datum_info = []
         if self.mode=='train':
-            self.compute_datum_info_train()      #其实最有技术含量的在这里
+            self.compute_datum_info_train()    
         else:
             self.compute_datum_info_val()
             
-        #self.total_length
         if self.mode=='val':
-            self.len_transductive=len(self.transductive)   #per-template地等长
+            self.len_transductive=len(self.transductive)   
         
     def compute_datum_info_train(self):
         curr = 0
@@ -113,34 +114,31 @@ class Arxiv_Dataset(Dataset):
                             self.datum_info.append((i + curr, key, i // 1,'1-7'))  
                         curr = self.total_length
 
-            elif key == 'classification':  # 以hop水平分组，4+8+8+(2),后面改写pretrain.py的时候要注意！！！！！
+            elif key == 'classification': 
                 for tems in self.task_list[key]:
                     if '2-1-1-2' in tems:
+
                         self.total_length += len(self.classification) * 1
                         for i in tqdm(range(self.total_length - curr)):
                             self.datum_info.append((i + curr, key, i // 1,'2-1','transductive')) 
-                            #self.datum_info.append((i + curr, key, i // 4,tems[i % 4],'transductive'))  
                         curr = self.total_length
                     elif '2-1-2-2' in tems:
 
                         self.total_length += len(self.classification) * 2
                         for i in tqdm(range(self.total_length - curr)):
                             self.datum_info.append((i + curr, key, i // 2,'2-2','transductive'))
-                            #self.datum_info.append((i + curr, key, i // 8,tems[i % 8],'transductive'))
                         curr = self.total_length
                     elif '2-1-3-2' in tems:
 
                         self.total_length += len(self.classification) * 2
                         for i in tqdm(range(self.total_length - curr)):
                             self.datum_info.append((i + curr, key, i // 2,'2-3','transductive'))
-                            #self.datum_info.append((i + curr, key, i // 8,tems[i % 8],'transductive'))
                         curr = self.total_length
                     elif '6-6-6-6' in tems:
 
                         self.total_length += len(self.classification) * 1
                         for i in tqdm(range(self.total_length - curr)):
                             self.datum_info.append((i + curr, key, i // 1,'5-6','transductive'))
-                            #self.datum_info.append((i + curr, key, i // 2,tems[i % 2],'transductive'))
                         curr = self.total_length
             elif key == 'intermediate':
                 pass
@@ -200,13 +198,11 @@ class Arxiv_Dataset(Dataset):
             if len(datum_info_idx) == 5:
                 task_name = datum_info_idx[1]
                 datum_idx = datum_info_idx[2]
-                #task_template = self.all_tasks[task_name][datum_info_idx[3]]
-     #           if datum_info_idx[3]!='5-6':
-    #                task_template = self.all_tasks[task_name][datum_info_idx[3]]
+
                 task_template_range = datum_info_idx[3]
+
                 if task_template_range=='2-1':
                     t_set=['2-1-1-2','2-3-1-2']
-                   # t_set=['2-1-1-1','2-1-1-2','2-3-1-1','2-3-1-2']
                     task_template=self.all_tasks[task_name][t_set[random.randint(0,len(t_set)-1)]]
                 if task_template_range=='2-2':
                     t_set=['2-1-2-2','2-1-2-4','2-3-2-2','2-3-2-4']
@@ -218,7 +214,6 @@ class Arxiv_Dataset(Dataset):
                     task_template=self.all_tasks[task_name][t_set[random.randint(0,len(t_set)-1)]]
                 if task_template_range=='5-6':
                     t_set=['6-6-6-6','6-6-6-7']
-                    #t_set=['5-5-5-5','6-6-6-6']
                     task_template=self.all_tasks[task_name][t_set[random.randint(0,len(t_set)-1)]]
                 
                 
@@ -236,15 +231,12 @@ class Arxiv_Dataset(Dataset):
                     t_set=['1-3-1-1','1-1-1-1','1-3-2-3','1-3-3-3','1-1-2-3','1-1-3-3']
                     task_template=self.all_tasks[task_name][t_set[random.randint(0,len(t_set)-1)]]
                 if task_template_range=='1-2':
-                    #t_set=['2-1-2-2','2-1-2-4','2-3-2-2','2-3-2-4']
                     t_set=['1-3-2-1','1-3-2-3','1-1-2-1','1-1-2-3']
                     task_template=self.all_tasks[task_name][t_set[random.randint(0,len(t_set)-1)]]
                 if task_template_range=='1-3':
-                    #t_set=['1-1-3-2','1-1-3-4','2-3-3-2','2-3-3-4']
                     t_set=['1-3-3-1','1-3-3-3','1-1-3-1','1-1-3-3']
                     task_template=self.all_tasks[task_name][t_set[random.randint(0,len(t_set)-1)]]
                 if task_template_range=='1-7':
-                    #t_set=['1-1-3-2','1-1-3-4','2-3-3-2','2-3-3-4']
                     t_set=['1-7-7-3','1-7-7-4']
                     task_template=self.all_tasks[task_name][t_set[random.randint(0,len(t_set)-1)]]
 
@@ -264,58 +256,48 @@ class Arxiv_Dataset(Dataset):
                 raise NotImplementedError
 
 
-
-#
         if task_name == 'link':
             if self.mode=='train': 
-                link_datum=[datum_idx]  #中心节点
+                link_datum=[datum_idx]  # Central Node
             elif self.mode=='val':
                 pass
 
-            if task_template['id'] == '1-1-1-1':    #记得都要加self.prefix,  记得做re_id: self.re_id
+            if task_template['id'] == '1-1-1-1':   
                 if self.mode=='train': 
                     real_id=[self.re_id[link_datum[0]]]
                     rand_prob = random.random()
-                   # point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
-                   # link_datum.append(point)
                     if rand_prob > 0.5:
                         point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
                         link_datum.append(point)
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[link_datum[0]]):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(self.train_L1[link_datum[0]]):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[link_datum[0]])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[self.train_L1[link_datum[0]][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[link_datum[0]][idx]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
                         real_id.append(self.re_id[link_datum[1]])
                         real_id.append(self.re_id[link_datum[0]])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         node_list=''    
                         count=0
 
@@ -326,19 +308,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>', '<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[link_datum[0]]):  #count永远无法大于，最多等于
+                        while go_on and count < len(self.train_L1[link_datum[0]]):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[link_datum[0]])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[self.train_L1[link_datum[0]][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[link_datum[0]][idx]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>', '<extra_id_0>')
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -350,33 +330,31 @@ class Arxiv_Dataset(Dataset):
                         real_id.append(self.re_id[negative])
                         real_id.append(self.re_id[link_datum[0]])
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val':   #这是测试阶段  #1-1-1-1
+                elif self.mode=='val':   
                     pass
 
-            elif task_template['id'] == '1-1-1-2':   #记得都要加self.prefix,  记得做re_id: self.re_id
+            elif task_template['id'] == '1-1-1-2':   
                 if self.mode=='train': 
                     real_id=[self.re_id[link_datum[0]]]
                     point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
                     link_datum.append(point)
-                    #
+                    
                     node_list=''    
                     count=0
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(self.train_L1[link_datum[0]]):  #count永远无法大于，最多等于
+                    while go_on and count < len(self.train_L1[link_datum[0]]):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(self.train_L1[link_datum[0]])))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'<extra_id_0>, '
                         real_id.append(self.re_id[self.train_L1[link_datum[0]][idx]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[link_datum[0]][idx]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -388,37 +366,34 @@ class Arxiv_Dataset(Dataset):
                         real_id.pop(-1)
                     real_id.append(self.re_id[link_datum[0]])
                     target_text=[self.re_id[link_datum[1]],1]
-                    #target_text = task_template['target'].format(self.re_id[link_datum[1]])  
 
-                elif self.mode=='val':   #这是测试阶段   1-1-1-2, 这里做测试要负采样，改source_text,但不要显式强调单一正确性
+                elif self.mode=='val':   
                     pass
 
 
 
 
 
-            elif task_template['id'] == '1-7-7-4':   #记得都要加self.prefix,  记得做re_id: self.re_id
+            elif task_template['id'] == '1-7-7-4':   
                 link_abs=self.node_feature[link_datum[0]][1] 
                 if self.mode=='train': 
                     real_id=[self.re_id[link_datum[0]]]
                     point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
                     link_datum.append(point)
-                    #
+                    
                     source_text=task_template['source'].format('<extra_id_0>', link_abs,'<extra_id_0>')
                     real_id.append(self.re_id[link_datum[0]])
                     target_text=[self.re_id[link_datum[1]],1]
-                    #target_text = task_template['target'].format(self.re_id[link_datum[1]])  
 
-                elif self.mode=='val':   #这是测试阶段   1-1-1-2, 这里做测试要负采样，改source_text,但不要显式强调单一正确性
+                elif self.mode=='val':   
                     pass
 
-            elif task_template['id'] == '1-7-7-3':    #记得都要加self.prefix,  记得做re_id: self.re_id
+            elif task_template['id'] == '1-7-7-3': 
                 link_abs=self.node_feature[link_datum[0]][1] 
                 if self.mode=='train': 
                     real_id=[self.re_id[link_datum[0]]]
                     rand_prob = random.random()
-                   # point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
-                   # link_datum.append(point)
+
                     if rand_prob > 0.5:
                         point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
                         link_datum.append(point)
@@ -441,16 +416,6 @@ class Arxiv_Dataset(Dataset):
                 elif self.mode=='val':   
                     pass
             
-            
-
-
-
-
-
-
-
-
-
 
             elif task_template['id'] == '1-1-2-1':
                 
@@ -468,41 +433,36 @@ class Arxiv_Dataset(Dataset):
                     if rand_prob > 0.5:
                         points=train_L2[random.randint(0, len(train_L2) - 1)]
                         link_datum.extend(points)
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[link_datum[2]])
                         real_id.append(self.re_id[link_datum[0]])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露   
+                    else:   
                         node_list=''    
                         count=0
                         negative=random.randint(0,19716)
@@ -512,19 +472,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>','<extra_id_0>')
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -538,7 +496,7 @@ class Arxiv_Dataset(Dataset):
 
 
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val':   #这是测试阶段    #1-1-2-1
+                elif self.mode=='val':   
                     pass
 
 
@@ -559,19 +517,17 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'<extra_id_0>, '
                         real_id.append(self.re_id[train_L2[idx][1]])
-                       # node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -585,7 +541,7 @@ class Arxiv_Dataset(Dataset):
 
                     target_text = [self.re_id[link_datum[2]],1]
 
-                elif self.mode=='val':   #这是测试阶段  1-1-2-2
+                elif self.mode=='val':   
                     pass
 
 
@@ -602,33 +558,27 @@ class Arxiv_Dataset(Dataset):
                     link_datum.extend(points)
                     rand_prob = random.random()
                     if rand_prob > 0.5:
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         middle_list=''
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>', '<extra_id_0>','<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[train_L2[idx][0]])
                             middle_list=middle_list+'<extra_id_0>, '
                             id_2.append(self.re_id[train_L2[idx][0]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>','<extra_id_0>','<extra_id_0>')
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -640,10 +590,9 @@ class Arxiv_Dataset(Dataset):
                         real_id.append(self.re_id[link_datum[2]])
                         real_id.append(self.re_id[link_datum[0]])
                         real_id.append(self.re_id[link_datum[1]])
-                        #我要做到当while结束的时候source_text已经ok了
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         temp_L2=self.train_L1[link_datum[1]]
                         node_list=''
                         middle_list=''    
@@ -655,22 +604,21 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>', '<extra_id_0>','<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
+
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[train_L2[idx][0]])
+
                             middle_list=middle_list+'<extra_id_0>, '
                             id_2.append(self.re_id[train_L2[idx][0]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2],'<extra_id_0>', '<extra_id_0>','<extra_id_0>')
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -687,7 +635,7 @@ class Arxiv_Dataset(Dataset):
 
 
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val':   #这是测试阶段   1-1-2-3
+                elif self.mode=='val':   
                     pass
 
             elif task_template['id'] == '1-1-2-4':
@@ -708,22 +656,21 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2],'<extra_id_0>','<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2): 
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
+
                         node_list=node_list+'<extra_id_0>, '
                         id_1.append(self.re_id[train_L2[idx][1]])
-                        #middle_list=middle_list+'{}, '.format(self.re_id[train_L2[idx][0]])
+
                         middle_list=middle_list+'<extra_id_0>, '
                         id_2.append(self.re_id[train_L2[idx][0]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>','<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -740,7 +687,7 @@ class Arxiv_Dataset(Dataset):
 
                     target_text =[self.re_id[link_datum[2]],1]
 
-                elif self.mode=='val':   #这是测试阶段  1-1-2-4
+                elif self.mode=='val':   
                     pass
 
             elif task_template['id'] == '1-1-3-1':
@@ -752,12 +699,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
                     temp_L3=[]
-                    train_L3=[]   #这个用作node采样
-                    #random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                     #   ta=copy.deepcopy(self.train_L1[ele[1]])
-                      #  random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
                                 temp_L3.append(el)
@@ -766,36 +710,31 @@ class Arxiv_Dataset(Dataset):
                     if rand_prob > 0.5:
                         points=train_L3[random.randint(0, len(train_L3) - 1)]
                         link_datum.extend(points)
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>','<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[link_datum[3]])
                         real_id.append(self.re_id[link_datum[0]])
                         target_text = task_template['target'].format('yes')
@@ -811,19 +750,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3): 
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', '<extra_id_0>')
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -836,7 +773,7 @@ class Arxiv_Dataset(Dataset):
                         real_id.append(self.re_id[link_datum[0]])
 
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val':   #这是测试阶段   1-1-3-1
+                elif self.mode=='val':   
                     pass
 
             elif task_template['id'] == '1-1-3-2':
@@ -848,12 +785,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                  #  random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                   #     ta=copy.deepcopy(self.train_L1[ele[1]])
-                    #    random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -865,19 +799,17 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'<extra_id_0>, '
                         real_id.append(self.re_id[train_L3[idx][2]])
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -892,7 +824,7 @@ class Arxiv_Dataset(Dataset):
                     target_text = [self.re_id[link_datum[3]],1]
 
 
-                elif self.mode=='val':   #这是测试阶段  1-1-3-2   答案不唯一
+                elif self.mode=='val':  
                     pass
 
             elif task_template['id'] == '1-1-3-3':
@@ -905,12 +837,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                  #  random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                   #     ta=copy.deepcopy(self.train_L1[ele[1]])
-                    #    random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -920,34 +849,29 @@ class Arxiv_Dataset(Dataset):
                     rand_prob = random.random()
                     if rand_prob > 0.5:
                         
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         middle_list=''
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>', '<extra_id_0>','(<extra_id_0>,<extra_id_0>)')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L3[idx][2]])
                             middle_list=middle_list+'(<extra_id_0>,<extra_id_0>), '
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>', '<extra_id_0>','(<extra_id_0>,<extra_id_0>)')
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -961,10 +885,10 @@ class Arxiv_Dataset(Dataset):
                         real_id.append(self.re_id[link_datum[0]])
                         real_id.append(self.re_id[link_datum[1]])
                         real_id.append(self.re_id[link_datum[2]])
-                        #我要做到当while结束的时候source_text已经ok了
+
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else: 
                         temp_L3=self.train_L1[link_datum[2]]
                         node_list=''
                         middle_list=''    
@@ -976,23 +900,21 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2],'<extra_id_0>', '<extra_id_0>','(<extra_id_0>,<extra_id_0>)')
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L3[idx][2]])
                             middle_list=middle_list+'(<extra_id_0>,<extra_id_0>), '
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2],'<extra_id_0>', '<extra_id_0>','(<extra_id_0>,<extra_id_0>)')
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -1011,7 +933,7 @@ class Arxiv_Dataset(Dataset):
 
 
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val':   #这是测试阶段      1-1-3-3
+                elif self.mode=='val':   
                     pass
             elif task_template['id'] == '1-1-3-4': 
                 if self.mode=='train': 
@@ -1023,12 +945,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                #    random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                 #       ta=copy.deepcopy(self.train_L1[ele[1]])
-                  #      random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -1041,10 +960,9 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2],'<extra_id_0>','(<extra_id_0>,<extra_id_0>)')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
@@ -1053,11 +971,9 @@ class Arxiv_Dataset(Dataset):
                         middle_list=middle_list+'(<extra_id_0>,<extra_id_0>), '
                         id_2.append(self.re_id[train_L3[idx][0]])
                         id_2.append(self.re_id[train_L3[idx][1]])
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
-                        #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>','(<extra_id_0>,<extra_id_0>)')
-                            #
+                            
 
                         count+=1  
 
@@ -1076,61 +992,48 @@ class Arxiv_Dataset(Dataset):
 
                     target_text =[self.re_id[link_datum[3]],1]
 
-                elif self.mode=='val':   #这是测试阶段   1-1-3-4
+                elif self.mode=='val':  
                     pass
-            #
 
 
-
-
-
-
-
-
-            elif task_template['id'] == '1-3-1-1':    #记得都要加self.prefix,  记得做re_id: self.re_id
+            elif task_template['id'] == '1-3-1-1':    
                 if self.mode=='train': 
                     real_id=[self.re_id[link_datum[0]]]
                     rand_prob = random.random()
-                   # point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
-                   # link_datum.append(point)
+
                     if rand_prob > 0.5:
                         point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
                         link_datum.append(point)
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[1]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[link_datum[0]]):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(self.train_L1[link_datum[0]]):  
+                            temp_text=source_text  
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[link_datum[0]])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[self.train_L1[link_datum[0]][idx]][0])
                             real_id.append(self.re_id[self.train_L1[link_datum[0]][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[link_datum[0]][idx]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[1]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1 
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[link_datum[1]])
                         real_id.append(self.re_id[link_datum[0]])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         node_list=''    
                         count=0
 
@@ -1141,19 +1044,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[link_datum[0]]):  #count永远无法大于，最多等于
+                        while go_on and count < len(self.train_L1[link_datum[0]]):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[link_datum[0]])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[self.train_L1[link_datum[0]][idx]][0])
                             real_id.append(self.re_id[self.train_L1[link_datum[0]][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[link_datum[0]][idx]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -1168,30 +1069,28 @@ class Arxiv_Dataset(Dataset):
                 elif self.mode=='val':   
                     pass
 
-            elif task_template['id'] == '1-3-1-2':   #记得都要加self.prefix,  记得做re_id: self.re_id
+            elif task_template['id'] == '1-3-1-2':  
                 if self.mode=='train': 
                     real_id=[self.re_id[link_datum[0]]]
                     point=self.train_L1[link_datum[0]][random.randint(0, len(self.train_L1[link_datum[0]]) - 1)]
                     link_datum.append(point)
-                    #
+                    
                     node_list=''    
                     count=0
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[link_datum[0]][0])
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(self.train_L1[link_datum[0]]):  #count永远无法大于，最多等于
+                    while go_on and count < len(self.train_L1[link_datum[0]]):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(self.train_L1[link_datum[0]])))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[self.train_L1[link_datum[0]][idx]][0])
                         real_id.append(self.re_id[self.train_L1[link_datum[0]][idx]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[link_datum[0]][idx]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
                         count+=1  
 
@@ -1203,15 +1102,9 @@ class Arxiv_Dataset(Dataset):
                         real_id.pop(-1)
                     real_id.append(self.re_id[link_datum[0]])
                     target_text=[self.re_id[link_datum[1]],1]
-                    #target_text = task_template['target'].format(self.re_id[link_datum[1]])  
 
-                elif self.mode=='val':   #这是测试阶段   1-1-1-2, 这里做测试要负采样，改source_text,但不要显式强调单一正确性
+                elif self.mode=='val':   
                     pass
-
-
-
-
-
 
 
 
@@ -1231,41 +1124,36 @@ class Arxiv_Dataset(Dataset):
                     if rand_prob > 0.5:
                         points=train_L2[random.randint(0, len(train_L2) - 1)]
                         link_datum.extend(points)
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[2]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             real_id.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[2]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[link_datum[2]])
                         real_id.append(self.re_id[link_datum[0]])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露   
+                    else: 
                         node_list=''    
                         count=0
                         negative=random.randint(0,19716)
@@ -1275,19 +1163,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             real_id.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -1322,19 +1208,17 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[0]][0])
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                         real_id.append(self.re_id[train_L2[idx][1]])
-                       # node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
                         count+=1  
 
@@ -1365,33 +1249,29 @@ class Arxiv_Dataset(Dataset):
                     link_datum.extend(points)
                     rand_prob = random.random()
                     if rand_prob > 0.5:
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         middle_list=''
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[2]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
+
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[train_L2[idx][0]])
+
                             middle_list=middle_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][0]][0])
                             id_2.append(self.re_id[train_L2[idx][0]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[2]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0])
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -1403,10 +1283,10 @@ class Arxiv_Dataset(Dataset):
                         real_id.append(self.re_id[link_datum[2]])
                         real_id.append(self.re_id[link_datum[0]])
                         real_id.append(self.re_id[link_datum[1]])
-                        #我要做到当while结束的时候source_text已经ok了
+
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         temp_L2=self.train_L1[link_datum[1]]
                         node_list=''
                         middle_list=''    
@@ -1418,22 +1298,19 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[train_L2[idx][0]])
                             middle_list=middle_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][0]][0])
                             id_2.append(self.re_id[train_L2[idx][0]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0])
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -1471,22 +1348,21 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0])
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L2[idx][1]])
+
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                         id_1.append(self.re_id[train_L2[idx][1]])
-                        #middle_list=middle_list+'{}, '.format(self.re_id[train_L2[idx][0]])
+
                         middle_list=middle_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][0]][0])
                         id_2.append(self.re_id[train_L2[idx][0]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0])
-                            #
+                            
 
                         count+=1  
 
@@ -1515,12 +1391,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
                     temp_L3=[]
-                    train_L3=[]   #这个用作node采样
-                   # random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                    #    ta=copy.deepcopy(self.train_L1[ele[1]])
-                     #   random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
                                 temp_L3.append(el)
@@ -1529,36 +1402,30 @@ class Arxiv_Dataset(Dataset):
                     if rand_prob > 0.5:
                         points=train_L3[random.randint(0, len(train_L3) - 1)]
                         link_datum.extend(points)
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[link_datum[3]][0],'<extra_id_0>',self.node_feature[link_datum[0]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3): 
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[link_datum[3]][0],'<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
                         real_id.append(self.re_id[link_datum[3]])
                         real_id.append(self.re_id[link_datum[0]])
                         target_text = task_template['target'].format('yes')
@@ -1574,19 +1441,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[negative][0],'<extra_id_0>',self.node_feature[link_datum[0]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[negative][0],'<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -1611,12 +1476,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                #    random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                 #       ta=copy.deepcopy(self.train_L1[ele[1]])
-                  #      random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -1628,19 +1490,17 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],'<extra_id_0>',self.node_feature[link_datum[0]][0])
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                         real_id.append(self.re_id[train_L3[idx][2]])
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], '<extra_id_0>',self.node_feature[link_datum[0]][0])
-                            #
+                            
 
                         count+=1  
 
@@ -1668,12 +1528,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                 #   random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                  #      ta=copy.deepcopy(self.train_L1[ele[1]])
-                   #     random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -1683,34 +1540,29 @@ class Arxiv_Dataset(Dataset):
                     rand_prob = random.random()
                     if rand_prob > 0.5:
                         
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         middle_list=''
                         count=0
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[3]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0],'<extra_id_0>',self.node_feature[link_datum[2]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             id_1.append(self.re_id[train_L3[idx][2]])
                             middle_list=middle_list+'(<extra_id_0>,{}; <extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][0]][0],self.node_feature[train_L3[idx][1]][0])
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[3]][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0],'<extra_id_0>',self.node_feature[link_datum[2]][0])
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -1724,10 +1576,10 @@ class Arxiv_Dataset(Dataset):
                         real_id.append(self.re_id[link_datum[0]])
                         real_id.append(self.re_id[link_datum[1]])
                         real_id.append(self.re_id[link_datum[2]])
-                        #我要做到当while结束的时候source_text已经ok了
+
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         temp_L3=self.train_L1[link_datum[2]]
                         node_list=''
                         middle_list=''    
@@ -1739,23 +1591,21 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0],'<extra_id_0>',self.node_feature[link_datum[2]][0])
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             id_1.append(self.re_id[train_L3[idx][2]])
                             middle_list=middle_list+'(<extra_id_0>,{}; <extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][0]][0],self.node_feature[train_L3[idx][1]][0])
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2], middle_list[:-2],'<extra_id_0>',self.node_feature[negative][0], '<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0],'<extra_id_0>',self.node_feature[link_datum[2]][0])
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -1787,12 +1637,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=link_datum[0]:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                 #   random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                   #     ta=copy.deepcopy(self.train_L1[ele[1]])
-                  #      random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]  
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=link_datum[0] and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -1805,10 +1652,9 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0],'<extra_id_0>',self.node_feature[link_datum[2]][0])
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
@@ -1817,11 +1663,9 @@ class Arxiv_Dataset(Dataset):
                         middle_list=middle_list+'(<extra_id_0>,{}; <extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][0]][0],self.node_feature[train_L3[idx][1]][0])
                         id_2.append(self.re_id[train_L3[idx][0]])
                         id_2.append(self.re_id[train_L3[idx][1]])
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
-                        #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                         source_text =self.prefix_1 + task_template['source'].format('<extra_id_0>',self.node_feature[link_datum[0]][0], node_list[:-2],middle_list[:-2],'<extra_id_0>',self.node_feature[link_datum[0]][0],'<extra_id_0>',self.node_feature[link_datum[1]][0],'<extra_id_0>',self.node_feature[link_datum[2]][0])
-                            #
+                            
 
                         count+=1  
 
@@ -1848,22 +1692,20 @@ class Arxiv_Dataset(Dataset):
         
         elif task_name == 'classification':
             if self.mode=='train':   
-                point=self.classification[datum_idx]
+                point=self.classification[datum_idx]  # Central Node
             elif self.mode=='val':
                 if cate=='inductive':
                     pass
-                    #point=self.inductive[datum_idx]   #实际上inductive这里这个point根本不能用,因为我都是给'A new node'
                 elif cate=='transductive':
                     point=self.transductive[datum_idx]
 
-            #统一进行label映射
             label=self.label_map[point]
-            #LA=['numerical analysis','multimedia','logic','society','security','distributed computing','human computer interaction','computational engineering','internet','complexity','']
+            
             negative=str(np.random.choice(list(set(self.LA).difference({label})),1,replace=False)[0])
 
             tit=self.node_feature[point][0]
 
-            if task_template['id'] == '5-5-5-5':   #无论训练测试都一个模板pipeline
+            if task_template['id'] == '5-5-5-5': 
                 abs=self.node_feature[point][1] 
                 rand_prob=random.random()
                 if rand_prob>0.5:
@@ -1874,28 +1716,27 @@ class Arxiv_Dataset(Dataset):
                     source_text =task_template['source'].format('<extra_id_0>', abs, '<extra_id_0>', negative)
                     real_id=[self.re_id[point],self.re_id[point]]
                     target_text = task_template['target'].format('no')
-#
+
             elif task_template['id']=='6-6-6-6':
                 abss=self.node_feature[point][1] 
-                while len(self.tokenizer.encode(tit))>60:
-                    tit=self.tokenizer.decode(self.tokenizer.encode(tit)[:59],skip_special_tokens=True)
-             #   source_text =task_template['source'].format('<extra_id_0>',tit, abss, '<extra_id_0>',tit)
-                while len(self.tokenizer.encode(abss))>900:
-                    abss=self.tokenizer.decode(self.tokenizer.encode(abss)[:899],skip_special_tokens=True)
+                while len(self.tokenizer.encode(tit))>100:
+                    tit=self.tokenizer.decode(self.tokenizer.encode(tit)[:99],skip_special_tokens=True)
+                while len(self.tokenizer.encode(abss))>1024:
+                    abss=self.tokenizer.decode(self.tokenizer.encode(abss)[:1023],skip_special_tokens=True)
                 source_text =task_template['source'].format('<extra_id_0>',tit, abss, '<extra_id_0>',tit)
-                real_id=[self.re_id[point],self.re_id[point]]   #直接当成tokenize过了
+                real_id=[self.re_id[point],self.re_id[point]]   
                 target_text = task_template['target'].format(label)
 
             elif task_template['id']=='6-6-6-7':
                 abss=self.node_feature[point][1] 
-                while len(self.tokenizer.encode(tit))>60:
-                    tit=self.tokenizer.decode(self.tokenizer.encode(tit)[:59],skip_special_tokens=True)
-                while len(self.tokenizer.encode(abss))>900:
-                    abss=self.tokenizer.decode(self.tokenizer.encode(abss)[:899],skip_special_tokens=True)
+                while len(self.tokenizer.encode(tit))>100:
+                    tit=self.tokenizer.decode(self.tokenizer.encode(tit)[:99],skip_special_tokens=True)
+                while len(self.tokenizer.encode(abss))>1024:
+                    abss=self.tokenizer.decode(self.tokenizer.encode(abss)[:1023],skip_special_tokens=True)
                 source_text =task_template['source'].format('<extra_id_0>',tit, abss, '<extra_id_0>',tit)
-                real_id=[self.re_id[point],self.re_id[point]]   #直接当成tokenize过了
+                real_id=[self.re_id[point],self.re_id[point]]   
                 target_text = task_template['target'].format(label)
-#
+
 
             elif task_template['id'] == '2-1-1-1':
                 if self.mode!=None: 
@@ -1903,41 +1744,35 @@ class Arxiv_Dataset(Dataset):
                     if rand_prob > 0.5:
                         real_id=[self.re_id[point]]
 
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[point]):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(self.train_L1[point]):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[point])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[self.train_L1[point][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[point][idx]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
 
-                        real_id.append(self.re_id[point])     #记得append这一下
+                        real_id.append(self.re_id[point])    
                         target_text = task_template['target'].format('yes')
 
-                    else:     #对分类类别进行负label采样
+                    else:   
                         real_id=[self.re_id[point]]
 
                         node_list=''    
@@ -1946,19 +1781,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[point]):  #count永远无法大于，最多等于
+                        while go_on and count < len(self.train_L1[point]): 
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[point])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[self.train_L1[point][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[point][idx]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -1971,32 +1804,30 @@ class Arxiv_Dataset(Dataset):
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('no')
 
-                elif self.mode=='val':   #这是测试阶段  #2-1-1-1
+                elif self.mode=='val':   
                     pass
 
 
             elif task_template['id'] == '2-1-1-2':
                 if self.mode!=None: 
-                    #
+                    
                     real_id=[self.re_id[point]]
                     node_list=''    
                     count=0
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(self.train_L1[point]):  #count永远无法大于，最多等于
+                    while go_on and count < len(self.train_L1[point]):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(self.train_L1[point])))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'<extra_id_0>, '
                         real_id.append(self.re_id[self.train_L1[point][idx]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[point][idx]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -2010,7 +1841,7 @@ class Arxiv_Dataset(Dataset):
                     real_id.append(self.re_id[point])
                     target_text = task_template['target'].format(label)
 
-                elif self.mode=='val':   #2-1-1-2
+                elif self.mode=='val':   
                     pass
             
             elif task_template['id'] == '2-1-2-1':
@@ -2024,41 +1855,35 @@ class Arxiv_Dataset(Dataset):
                     rand_prob = random.random()
                     if rand_prob > 0.5:
                         real_id=[self.re_id[point]]
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2):  
+                            temp_text=source_text  
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L2[idx][1]])
 
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
-
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         real_id=[self.re_id[point]]
                         node_list=''    
                         count=0
@@ -2066,19 +1891,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -2090,7 +1913,7 @@ class Arxiv_Dataset(Dataset):
 
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val': #2-1-2-1
+                elif self.mode=='val': 
                     pass
             elif task_template['id'] == '2-1-2-2':
                 if self.mode!=None: 
@@ -2106,19 +1929,17 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'<extra_id_0>, '
                         real_id.append(self.re_id[train_L2[idx][1]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -2133,7 +1954,7 @@ class Arxiv_Dataset(Dataset):
 
                     target_text = task_template['target'].format(label)
 
-                elif self.mode=='val': #2-1-2-2     #!!!!!!!
+                elif self.mode=='val': 
                     pass
             elif task_template['id'] == '2-1-2-3':
                 if self.mode!=None: 
@@ -2148,33 +1969,28 @@ class Arxiv_Dataset(Dataset):
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
 
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         middle_list=''
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>', label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
+
                             middle_list=middle_list+'<extra_id_0>, '
                             id_2.append(self.re_id[train_L2[idx][0]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[self.train_L2[point][idx][0]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>', label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -2183,12 +1999,11 @@ class Arxiv_Dataset(Dataset):
                             if len(id_1)>0:
                                 id_1.pop(-1)
                                 id_2.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
                         real_id=real_id+id_1+id_2
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
                         node_list=''
@@ -2198,22 +2013,19 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>', negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2): 
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
                             middle_list=middle_list+'<extra_id_0>, '
                             id_2.append(self.re_id[train_L2[idx][0]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[self.train_L2[point][idx][0]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>', negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -2228,7 +2040,7 @@ class Arxiv_Dataset(Dataset):
 
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val': #2-1-2-3
+                elif self.mode=='val': 
                     pass
             elif task_template['id'] == '2-1-2-4':
                 if self.mode!=None: 
@@ -2247,22 +2059,19 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'<extra_id_0>, '
                         id_1.append(self.re_id[train_L2[idx][1]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
                         middle_list=middle_list+'<extra_id_0>, '
                         id_2.append(self.re_id[train_L2[idx][0]])
-                        #middle_list=middle_list+'{}, '.format(self.re_id[self.train_L2[point][idx][0]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -2280,13 +2089,13 @@ class Arxiv_Dataset(Dataset):
 
                     target_text = task_template['target'].format(label)
 
-                elif self.mode=='val':  #2-1-2-4
+                elif self.mode=='val':  
                     pass
 
 
 
 
-            elif task_template['id'] == '2-1-3-1':    #3阶还是有点特殊的
+            elif task_template['id'] == '2-1-3-1':    
                 if self.mode!=None: 
                     train_L2=[]
                     for eee in self.train_L1[point]:
@@ -2294,12 +2103,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=point:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                #    random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                #        ta=copy.deepcopy(self.train_L1[ele[1]])
-                 #       random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -2307,54 +2113,38 @@ class Arxiv_Dataset(Dataset):
                     if rand_prob > 0.5:
                         real_id=[self.re_id[point]]
 
-                        #train_L3=[]   #这个用作node采样
-                        #for ele in train_L2:
-                         #   for el in self.train_L1[ele[1]]:
-                          #      if el!=ele[0] and el!=point:
-                           #         train_L3.append(ele+[el])
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>', label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else: 
                         real_id=[self.re_id[point]]
 
-                        #train_L3=[]   #这个用作node采样
-                        #for ele in train_L2:
-                         #   for el in self.train_L1[ele[1]]:
-                          #      if el!=ele[0] and el!=point:
-                           #         train_L3.append(ele+[el])
                         
-
                         node_list=''    
                         count=0
                         
@@ -2362,20 +2152,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], '<extra_id_0>', negative)
-                            #
-
+                            
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
@@ -2386,7 +2173,7 @@ class Arxiv_Dataset(Dataset):
 
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val':   #这是测试阶段   2-1-3-1
+                elif self.mode=='val':   
                     pass
             elif task_template['id'] == '2-1-3-2':
                 if self.mode!=None: 
@@ -2397,40 +2184,30 @@ class Arxiv_Dataset(Dataset):
                             
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                   # random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                      #  ta=copy.deepcopy(self.train_L1[ele[1]])
-                       # random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
                     real_id=[self.re_id[point]]
 
-                    #train_L3=[]   #这个用作node采样
-                    #for ele in train_L2:
-                     #   for el in self.train_L1[ele[1]]:
-                      #      if el!=ele[0] and el!=point:
-                       #         train_L3.append(ele+[el])
                     node_list=''    
                     count=0
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'<extra_id_0>, '
                         real_id.append(self.re_id[train_L3[idx][2]])
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],'<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -2445,7 +2222,7 @@ class Arxiv_Dataset(Dataset):
                     target_text = task_template['target'].format(label)
 
 
-                elif self.mode=='val':  #2-1-3-2
+                elif self.mode=='val':  
                     pass
 
             elif task_template['id'] == '2-1-3-3':
@@ -2456,12 +2233,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=point:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                  #  random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                   #     ta=copy.deepcopy(self.train_L1[ele[1]])
-                    #    random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -2470,39 +2244,29 @@ class Arxiv_Dataset(Dataset):
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
 
-                        #train_L3=[]   #这个用作node采样
-                        #for ele in train_L2:
-                         #   for el in self.train_L1[ele[1]]:
-                          #      if el!=ele[0] and el!=point:
-                           #         train_L3.append(ele+[el])
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         middle_list=''
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>',label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             middle_list=middle_list+'(<extra_id_0>,<extra_id_0>), '
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2], middle_list[:-2],'<extra_id_0>',label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -2512,20 +2276,14 @@ class Arxiv_Dataset(Dataset):
                                 id_1.pop(-1)
                                 id_2.pop(-1)
                                 id_2.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id=real_id+id_1+id_2
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
-
-                        #train_L3=[]   #这个用作node采样
-                        #for ele in train_L2:
-                         #   for el in self.train_L1[ele[1]]:
-                          #      if el!=ele[0] and el!=point:
-                           #         train_L3.append(ele+[el])
                       
                         node_list=''
                         middle_list=''    
@@ -2535,24 +2293,22 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>',negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             node_list=node_list+'<extra_id_0>, '
                             id_1.append(self.re_id[train_L3[idx][2]])
 
                             middle_list=middle_list+'(<extra_id_0>,<extra_id_0>), '
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>', negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -2568,7 +2324,7 @@ class Arxiv_Dataset(Dataset):
                         real_id=real_id+id_1+id_2
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('no')
-                elif self.mode=='val':   #这是测试阶段      2-1-3-3
+                elif self.mode=='val':   
                     pass
             elif task_template['id'] == '2-1-3-4':
                 if self.mode!=None: 
@@ -2578,46 +2334,36 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=point:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                 #   random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                    #    ta=copy.deepcopy(self.train_L1[ele[1]])
-                     #   random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]: #ta[:30]:
+                    train_L3=[]  
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]: 
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
                     real_id=[self.re_id[point]]
                     id_1,id_2=[],[]
 
-                    #train_L3=[]   #这个用作node采样
-                    #for ele in train_L2:
-                     #   for el in self.train_L1[ele[1]]:
-                      #      if el!=ele[0] and el!=point:
-                       #         train_L3.append(ele+[el])
                     node_list=''    
                     middle_list=''
                     count=0
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2],'<extra_id_0>')
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3): 
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                         node_list=node_list+'<extra_id_0>, '
                         id_1.append(self.re_id[train_L3[idx][2]])
                         middle_list=middle_list+'(<extra_id_0>,<extra_id_0>), '
                         id_2.append(self.re_id[train_L3[idx][0]])
                         id_2.append(self.re_id[train_L3[idx][1]])
-                        #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>', node_list[:-2],middle_list[:-2], '<extra_id_0>')
-                            #
+                            
 
                         count+=1  
 
@@ -2635,52 +2381,46 @@ class Arxiv_Dataset(Dataset):
 
                     target_text = task_template['target'].format(label)
 
-                elif self.mode=='val':   #这是测试阶段   2-1-3-4
+                elif self.mode=='val':   
                     pass
             
 
 
-            elif task_template['id'] == '2-3-1-1':    #while循环一定会进去
+            elif task_template['id'] == '2-3-1-1':    
                 if self.mode!=None: 
                     rand_prob = random.random()
                     if rand_prob > 0.5:
                         real_id=[self.re_id[point]]
 
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[point]):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(self.train_L1[point]):  
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[point])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[self.train_L1[point][idx]][0])
                             real_id.append(self.re_id[self.train_L1[point][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[point][idx]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
 
-                        real_id.append(self.re_id[point])     #记得append这一下
+                        real_id.append(self.re_id[point])     
                         target_text = task_template['target'].format('yes')
 
-                    else:     #对分类类别进行负label采样
+                    else:     
                         real_id=[self.re_id[point]]
 
                         node_list=''    
@@ -2689,19 +2429,18 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(self.train_L1[point]):  #count永远无法大于，最多等于
+                        while go_on and count < len(self.train_L1[point]):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(self.train_L1[point])))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[self.train_L1[point][idx]][0])
                             real_id.append(self.re_id[self.train_L1[point][idx]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[point][idx]])
+
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -2720,26 +2459,24 @@ class Arxiv_Dataset(Dataset):
 
             elif task_template['id'] == '2-3-1-2':
                 if self.mode!=None: 
-                    #
+                    
                     real_id=[self.re_id[point]]
                     node_list=''    
                     count=0
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],'<extra_id_0>',tit)
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(self.train_L1[point]):  #count永远无法大于，最多等于
+                    while go_on and count < len(self.train_L1[point]):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(self.train_L1[point])))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[self.train_L1[point][idx]][0])
                         real_id.append(self.re_id[self.train_L1[point][idx]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L1[point][idx]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit)
-                            #
+                            
 
                         count+=1  
 
@@ -2767,41 +2504,35 @@ class Arxiv_Dataset(Dataset):
                     rand_prob = random.random()
                     if rand_prob > 0.5:
                         real_id=[self.re_id[point]]
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2): 
+                            temp_text=source_text   
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             real_id.append(self.re_id[train_L2[idx][1]])
 
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
-
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         real_id=[self.re_id[point]]
                         node_list=''    
                         count=0
@@ -2809,19 +2540,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             real_id.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -2849,19 +2578,17 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],'<extra_id_0>',tit)
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                         real_id.append(self.re_id[train_L2[idx][1]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit)
-                            #
+                            
 
                         count+=1  
 
@@ -2891,33 +2618,28 @@ class Arxiv_Dataset(Dataset):
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
 
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         middle_list=''
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], middle_list[:-2],'<extra_id_0>',tit, label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L2):  
+                            temp_text=source_text  
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
+
                             middle_list=middle_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][0]][0])
                             id_2.append(self.re_id[train_L2[idx][0]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[self.train_L2[point][idx][0]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], middle_list[:-2],'<extra_id_0>',tit, label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -2926,12 +2648,12 @@ class Arxiv_Dataset(Dataset):
                             if len(id_1)>0:
                                 id_1.pop(-1)
                                 id_2.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id=real_id+id_1+id_2
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
                         node_list=''
@@ -2941,22 +2663,20 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2], '<extra_id_0>',tit, negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L2):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                             id_1.append(self.re_id[train_L2[idx][1]])
-                            #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
+
                             middle_list=middle_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][0]][0])
                             id_2.append(self.re_id[train_L2[idx][0]])
-                            #middle_list=middle_list+'{}, '.format(self.re_id[self.train_L2[point][idx][0]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2], '<extra_id_0>',tit, negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -2990,22 +2710,21 @@ class Arxiv_Dataset(Dataset):
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2],'<extra_id_0>',tit)
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L2):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L2):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L2)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][1]][0])
                         id_1.append(self.re_id[train_L2[idx][1]])
-                        #node_list=node_list+'{}, '.format(self.re_id[self.train_L2[point][idx][1]])
+
                         middle_list=middle_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L2[idx][0]][0])
                         id_2.append(self.re_id[train_L2[idx][0]])
-                        #middle_list=middle_list+'{}, '.format(self.re_id[self.train_L2[point][idx][0]])
+
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2], '<extra_id_0>',tit)
-                            #
+                            
 
                         count+=1  
 
@@ -3029,7 +2748,7 @@ class Arxiv_Dataset(Dataset):
 
 
 
-            elif task_template['id'] == '2-3-3-1':    #3阶还是有点特殊的
+            elif task_template['id'] == '2-3-3-1':    
                 if self.mode!=None: 
                     train_L2=[]
                     for eee in self.train_L1[point]:
@@ -3037,12 +2756,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=point:
                                 train_L2.append([eee,ttt])
                     
-                    train_L3=[]   #这个用作node采样
-                  #  random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                   #     ta=copy.deepcopy(self.train_L1[ele[1]])
-                    #    random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -3050,52 +2766,36 @@ class Arxiv_Dataset(Dataset):
                     if rand_prob > 0.5:
                         real_id=[self.re_id[point]]
 
-                        #train_L3=[]   #这个用作node采样
-                        #for ele in train_L2:
-                         #   for el in self.train_L1[ele[1]]:
-                          #      if el!=ele[0] and el!=point:
-                           #         train_L3.append(ele+[el])
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''   
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3):  
+                            temp_text=source_text  
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],'<extra_id_0>',tit, label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
                         else:
                             source_text=temp_text
                             real_id.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         real_id=[self.re_id[point]]
-
-                        #train_L3=[]   #这个用作node采样
-                        #for ele in train_L2:
-                        #    for el in self.train_L1[ele[1]]:
-                         #       if el!=ele[0] and el!=point:
-                          #          train_L3.append(ele+[el])
                         
 
                         node_list=''    
@@ -3105,19 +2805,17 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             real_id.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], '<extra_id_0>',tit, negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -3139,40 +2837,30 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=point:
                                 train_L2.append([eee,ttt])
                     
-                    train_L3=[]   #这个用作node采样
-               #     random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                  #      ta=copy.deepcopy(self.train_L1[ele[1]])
-                   #     random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
                     real_id=[self.re_id[point]]
 
-                   # train_L3=[]   #这个用作node采样
-                    #for ele in train_L2:
-                     #   for el in self.train_L1[ele[1]]:
-                      #      if el!=ele[0] and el!=point:
-                       #         train_L3.append(ele+[el])
                     node_list=''    
                     count=0
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],'<extra_id_0>',tit)
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                         real_id.append(self.re_id[train_L3[idx][2]])
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],'<extra_id_0>',tit)
-                            #
+                            
 
                         count+=1  
 
@@ -3198,12 +2886,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=point:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                #    random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-                 #       ta=copy.deepcopy(self.train_L1[ele[1]])
-                  #      random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]  
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
 
@@ -3212,39 +2897,29 @@ class Arxiv_Dataset(Dataset):
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
 
-                       # train_L3=[]   #这个用作node采样
-                       # for ele in train_L2:
-                        #    for el in self.train_L1[ele[1]]:
-                         #       if el!=ele[0] and el!=point:
-                          #          train_L3.append(ele+[el])
-                        node_list=''    #这个在tokenizer看来不占位，非常好
+                        node_list=''    
                         middle_list=''
                         count=0
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], middle_list[:-2],'<extra_id_0>',tit,label)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
-                            temp_text=source_text   #此时的temp_text是合格的
+                        while go_on and count < len(train_L3):  
+                            temp_text=source_text  
 
-                            #处理得到新的source_text,并且为了保险是采用完全重新赋值的方式
-
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             id_1.append(self.re_id[train_L3[idx][2]])
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             middle_list=middle_list+'(<extra_id_0>,{}; <extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][0]][0],self.node_feature[train_L3[idx][1]][0])
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2], middle_list[:-2],'<extra_id_0>',tit,label)
-                            #
+                            
 
-                            count+=1   #超长本身会报错吗？
-                            #不会，self.tokenizer.tokenize(...) can be used for any long sequence to detect. Good!
+                            count+=1   
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         if len(self.tokenizer.tokenize(source_text))+1 <= self.l_max:
                             pass
@@ -3254,20 +2929,14 @@ class Arxiv_Dataset(Dataset):
                                 id_1.pop(-1)
                                 id_2.pop(-1)
                                 id_2.pop(-1)
-                        #我要做到当while结束的时候source_text已经ok了
+
                         real_id=real_id+id_1+id_2
                         real_id.append(self.re_id[point])
                         target_text = task_template['target'].format('yes')
 
-                    else:  #得做负例采样, 结合isolated, inductive, L(第二层次子图)就可以采，不能用t_L,不然信息泄露
+                    else:  
                         real_id=[self.re_id[point]]
                         id_1,id_2=[],[]
-
-                       # train_L3=[]   #这个用作node采样
-                        #for ele in train_L2:
-                         #   for el in self.train_L1[ele[1]]:
-                          #      if el!=ele[0] and el!=point:
-                           #         train_L3.append(ele+[el])
                       
                         node_list=''
                         middle_list=''    
@@ -3277,24 +2946,22 @@ class Arxiv_Dataset(Dataset):
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2], '<extra_id_0>',tit,negative)
                         go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                         already_idx=[]
-                        while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                        while go_on and count < len(train_L3):  
                             temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                             select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                             idx=int(np.random.choice(select,1,replace=False)[0])
                             already_idx.append(idx)
-                            #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                             node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                             id_1.append(self.re_id[train_L3[idx][2]])
 
                             middle_list=middle_list+'(<extra_id_0>,{}; <extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][0]][0],self.node_feature[train_L3[idx][1]][0])
                             id_2.append(self.re_id[train_L3[idx][0]])
                             id_2.append(self.re_id[train_L3[idx][1]])
-                            #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                             source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2], '<extra_id_0>',tit, negative)
-                            #
+                            
 
                             count+=1  
                             go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
@@ -3320,12 +2987,9 @@ class Arxiv_Dataset(Dataset):
                             if ttt!=point:
                                 train_L2.append([eee,ttt])
 
-                    train_L3=[]   #这个用作node采样
-                  #  random.shuffle(train_L2)
-                    for ele in train_L2:#[:200]:
-              #          ta=copy.deepcopy(self.train_L1[ele[1]])
-               #         random.shuffle(ta)
-                        for el in self.train_L1[ele[1]]:#ta[:30]:
+                    train_L3=[]   
+                    for ele in train_L2:
+                        for el in self.train_L1[ele[1]]:
                             if el!=point and el!=ele[0]:
                                 train_L3.append(ele+[el])
                         
@@ -3333,34 +2997,27 @@ class Arxiv_Dataset(Dataset):
                     real_id=[self.re_id[point]]
                     id_1,id_2=[],[]
 
-                    #train_L3=[]   #这个用作node采样
-                    #for ele in train_L2:
-                     #   for el in self.train_L1[ele[1]]:
-                      #      if el!=ele[0] and el!=point:
-                       #         train_L3.append(ele+[el])
                     node_list=''    
                     middle_list=''
                     count=0
                     source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2],'<extra_id_0>',tit)
                     go_on=True if len(self.tokenizer.tokenize(source_text))+1 < self.l_max else False
                     already_idx=[]
-                    while go_on and count < len(train_L3):  #count永远无法大于，最多等于
+                    while go_on and count < len(train_L3):  
                         temp_text=source_text   
 
-                            #只要在这个意义上不重复就行了
                         select=list(set(list(range(len(train_L3)))).difference(set(already_idx)))
                         idx=int(np.random.choice(select,1,replace=False)[0])
                         already_idx.append(idx)
-                        #node_list=node_list+'{}, '.format(self.re_id[train_L3[idx][2]])
+
                         node_list=node_list+'(<extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][2]][0])
                         id_1.append(self.re_id[train_L3[idx][2]])
                         middle_list=middle_list+'(<extra_id_0>,{}; <extra_id_0>,{}), '.format(self.node_feature[train_L3[idx][0]][0],self.node_feature[train_L3[idx][1]][0])
                         id_2.append(self.re_id[train_L3[idx][0]])
                         id_2.append(self.re_id[train_L3[idx][1]])
-                        #middle_list=middle_list+'({},{}), '.format(self.re_id[train_L3[idx][0]],self.re_id[train_L3[idx][1]])
 
                         source_text =self.prefix_2 + task_template['source'].format('<extra_id_0>',tit, node_list[:-2],middle_list[:-2], '<extra_id_0>',tit)
-                            #
+                            
 
                         count+=1  
 
@@ -3383,10 +3040,7 @@ class Arxiv_Dataset(Dataset):
 
             else:
                 raise NotImplementedError
-            
 
-        elif task_name == 'intermediate':  #暂时没加
-            pass
         else:
             raise NotImplementedError
             
@@ -3406,15 +3060,14 @@ class Arxiv_Dataset(Dataset):
 
                 
         if task_template['id'].startswith('1') and (task_template['id'].endswith('2') or task_template['id'].endswith('4')):
-            #target_text[-1]=2
             target_text=[1]+target_text[:-1]
-            target_ids=target_text    #这里的target_text依旧存在隐患，如果需要对link任务做测试的话，但现在对我毫无影响
+            target_ids=target_text   
         else:
             target_ids = self.tokenizer.encode(target_text)
 
-        out_dict['input_ids'] = input_ids#torch.LongTensor(input_ids)
+        out_dict['input_ids'] = input_ids
         out_dict['input_length'] = len(input_ids)
-        out_dict['target_ids'] = target_ids#torch.LongTensor(target_ids)
+        out_dict['target_ids'] = target_ids
         out_dict['target_length'] = len(target_ids)
 
         out_dict['source_text'] = source_text
@@ -3430,7 +3083,7 @@ class Arxiv_Dataset(Dataset):
 
         return out_dict
     
-    def collate_fn(self, batch):   #Most important， this will call after the 'get_item_'
+    def collate_fn(self, batch):   
         batch_entry = {}
 
         B = len(batch)
@@ -3438,13 +3091,11 @@ class Arxiv_Dataset(Dataset):
         args = self.args
 
         if self.mode=='train':
-            #
-            S_W_L = max(entry['input_length']+entry['target_length']+1 for entry in batch)   #+1加的是结束符
-            target_ids = torch.ones(B, S_W_L, dtype=torch.long) * (-100)    #self.tokenizer.pad_token_id
+            S_W_L = max(entry['input_length']+entry['target_length']+1 for entry in batch)   
+            target_ids = torch.ones(B, S_W_L, dtype=torch.long) * (-100)   
         else:
             S_W_L = max(entry['input_length'] for entry in batch)  
             target_ids=None
-        #T_W_L = max(entry['target_length'] for entry in batch)
 
         input_ids = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
 
@@ -3481,8 +3132,6 @@ class Arxiv_Dataset(Dataset):
             if 'cate' in entry:
                 cate.append(entry['cate'])
             
-      #  word_mask = target_ids != self.tokenizer.pad_token_id
-       # target_ids[~word_mask] = -100
         batch_entry['task'] = tasks
 
         batch_entry['source_text'] = source_text
@@ -3495,8 +3144,8 @@ class Arxiv_Dataset(Dataset):
         batch_entry['attn_mask']= attn_mask
 
         batch_entry['loss_weights'] = loss_weights
-        batch_entry['temp_ids'] = temp_ids   #这个我自己加的, collate_fn我没有整体重写,but I essentially changed it
+        batch_entry['temp_ids'] = temp_ids 
         if len(cate)!=0:
             batch_entry['cate'] = cate
 
-        return batch_entry     # Real return, i.e. real batch datas , 目前没有把tokenized_text传出去
+        return batch_entry     

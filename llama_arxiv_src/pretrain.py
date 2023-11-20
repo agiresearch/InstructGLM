@@ -373,7 +373,7 @@ class Trainer(TrainerBase):
                         save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_mmid1/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                         save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_mmid1/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                        torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_mmid1.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_mmid1.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)//4:
                     if self.verbose:
                         for ig in range(32):
@@ -388,7 +388,7 @@ class Trainer(TrainerBase):
                         save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_mid1/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                         save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_mid1/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                        torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_mid1.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_mid1.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)*3//8:
                     if self.verbose:
                         for ig in range(32):
@@ -403,7 +403,7 @@ class Trainer(TrainerBase):
                         save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_mmid2/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                         save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_mmid2/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                        torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_mmid2.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_mmid2.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)//2:
                     if self.verbose:
                         for ig in range(32):
@@ -418,7 +418,7 @@ class Trainer(TrainerBase):
                         save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_mid2/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                         save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_mid2/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                        torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_mid2.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_mid2.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)*5//8:
                     if self.verbose:
                         for ig in range(32):
@@ -433,7 +433,7 @@ class Trainer(TrainerBase):
                         save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_mmid3/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                         save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_mmid3/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                        torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_mmid3.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_mmid3.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)*3//4:
                     if self.verbose:
                         for ig in range(32):
@@ -448,7 +448,7 @@ class Trainer(TrainerBase):
                         save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_mid3/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                         save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_mid3/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                        torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_mid3.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_mid3.pth".format(epoch+1,self.args.lr,self.args.train))
                 if global_step==len(self.train_loader)*7//8:
                     if self.verbose:
                         for ig in range(32):
@@ -463,7 +463,7 @@ class Trainer(TrainerBase):
                         save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_mend/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                         save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_mend/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                        torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_mend.pth".format(epoch+1,self.args.lr,self.args.train))
+                        torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_mend.pth".format(epoch+1,self.args.lr,self.args.train))
 
                 dist.barrier()
 
@@ -539,7 +539,7 @@ class Trainer(TrainerBase):
                 save_pickle(self.model.module.base_model.model.lm_head.lora_A.default.weight,"./llama_{}_end/Glm_a_{}.pkl".format(epoch+1,self.args.lr))
                 save_pickle(self.model.module.base_model.model.lm_head.lora_B.default.weight,"./llama_{}_end/Glm_b_{}.pkl".format(epoch+1,self.args.lr))
 
-                torch.save(self.first_model.state_dict(),"Gfirst_s_{}_{}_8_{}_end.pth".format(epoch+1,self.args.lr,self.args.train))
+                torch.save(self.first_model.state_dict(),"Gfirst_{}_{}_8_{}_end.pth".format(epoch+1,self.args.lr,self.args.train))
             dist.barrier()
             
 
@@ -549,32 +549,32 @@ class Trainer(TrainerBase):
             
             if (epoch+1)%8==1:
                 doc_prefix='./llama_{}_mmid1/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_mmid1.pth".format(epoch//8+1,self.args.lr,self.args.train) 
+                ckpt_path = "Gfirst_{}_{}_8_{}_mmid1.pth".format(epoch//8+1,self.args.lr,self.args.train) 
             elif (epoch+1)%8==2:
                 doc_prefix='./llama_{}_mid1/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_mid1.pth".format(epoch//8+1,self.args.lr,self.args.train) 
+                ckpt_path = "Gfirst_{}_{}_8_{}_mid1.pth".format(epoch//8+1,self.args.lr,self.args.train) 
             elif (epoch+1)%8==3:
                 doc_prefix='./llama_{}_mmid2/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_mmid2.pth".format(epoch//8+1,self.args.lr,self.args.train) 
+                ckpt_path = "Gfirst_{}_{}_8_{}_mmid2.pth".format(epoch//8+1,self.args.lr,self.args.train) 
             elif (epoch+1)%8==4:
                 doc_prefix='./llama_{}_mid2/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_mid2.pth".format(epoch//8+1,self.args.lr,self.args.train)
+                ckpt_path = "Gfirst_{}_{}_8_{}_mid2.pth".format(epoch//8+1,self.args.lr,self.args.train)
             elif (epoch+1)%8==5:
                 doc_prefix='./llama_{}_mmid3/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_mmid3.pth".format(epoch//8+1,self.args.lr,self.args.train)
+                ckpt_path = "Gfirst_{}_{}_8_{}_mmid3.pth".format(epoch//8+1,self.args.lr,self.args.train)
             elif (epoch+1)%8==6:
                 doc_prefix='./llama_{}_mid3/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_mid3.pth".format(epoch//8+1,self.args.lr,self.args.train)
+                ckpt_path = "Gfirst_{}_{}_8_{}_mid3.pth".format(epoch//8+1,self.args.lr,self.args.train)
             elif (epoch+1)%8==7:
                 doc_prefix='./llama_{}_mend/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_mend.pth".format(epoch//8+1,self.args.lr,self.args.train)
+                ckpt_path = "Gfirst_{}_{}_8_{}_mend.pth".format(epoch//8+1,self.args.lr,self.args.train)
             else:
                 doc_prefix='./llama_{}_end/'.format(epoch//8+1)
-                ckpt_path = "Gfirst_s_{}_{}_8_{}_end.pth".format(epoch//8+1,self.args.lr,self.args.train)
+                ckpt_path = "Gfirst_{}_{}_8_{}_end.pth".format(epoch//8+1,self.args.lr,self.args.train)
 
             #One can directly assign the checkpoint here when testing.
-##            doc_prefix='./your_main_model_pickle_fold/'
- ##           ckpt_path='your_first_model.pth'
+            ##doc_prefix='./your_main_model_pickle_fold/'
+            ##ckpt_path='your_first_model.pth'
 
             self.load_checkpoint(ckpt_path)
             self.first_model=self.first_model.to(self.args.gpu)

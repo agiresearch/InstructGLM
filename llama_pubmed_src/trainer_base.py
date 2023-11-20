@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import logging
 import shutil
-from pprint import pprint ##
+from pprint import pprint 
 
 from utils import load_state_dict, LossMeter, set_global_logging_level
 from pprint import pformat
@@ -28,7 +28,7 @@ _use_native_amp = True
 from torch.cuda.amp import autocast
 
 
-class TrainerBase(object):#
+class TrainerBase(object):
     def __init__(self, args, train_loader=None, val_loader=None, test_loader=None, train=True):
         self.args = args
 
@@ -36,7 +36,7 @@ class TrainerBase(object):#
         self.val_loader = val_loader
         self.test_loader = test_loader
 
-        self.verbose = True       #只有主GPU的verbose == True
+        self.verbose = True       
         if self.args.distributed:
             if self.args.gpu != 0:
                 self.verbose = False
@@ -71,7 +71,7 @@ class TrainerBase(object):#
         device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
 
         model = model_class.from_pretrained(
-            model_name,#s
+            model_name,
             config=config,
             load_in_8bit=True,
             torch_dtype=torch.float16,
@@ -88,12 +88,11 @@ class TrainerBase(object):#
         tokenizer.pad_token=tokenizer.unk_token
         special={'additional_special_tokens': ['<extra_id_0>']}
         tokenizer.add_special_tokens(special)
-        #tokenizer.add_tokens('<extra_id_0>')
                 
 
         return tokenizer
 
-    def create_optimizer_and_scheduler(self):   #这里还要改
+    def create_optimizer_and_scheduler(self): 
         if self.verbose:
             print('Building Optimizer')
 
@@ -127,8 +126,7 @@ class TrainerBase(object):#
 
             optim = AdamW(optimizer_grouped_parameters,
                           lr=self.args.lr, eps=self.args.adam_eps)
-            #lr_scheduler = get_linear_schedule_with_warmup(
-             #   optim, warmup_iters, t_total)   #其实我只需要调整t_total就能'欺骗'scheduler使得lr不降到0
+            #lr_scheduler = get_linear_schedule_with_warmup(optim, warmup_iters, t_total)  
 
         else:
             optim = self.args.optimizer(
@@ -138,7 +136,7 @@ class TrainerBase(object):#
 
     def load_checkpoint(self, ckpt_path):
         state_dict = load_state_dict(ckpt_path, 'cpu')
-        results = self.first_model.load_state_dict(state_dict, strict=True)   #这儿我改了...............................................
+        results = self.first_model.load_state_dict(state_dict, strict=True)   
         if self.verbose:
             print('Model loaded from ', ckpt_path)
             pprint(results)

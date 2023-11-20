@@ -65,7 +65,8 @@ class Arxiv_Dataset(Dataset):
         self.re_id=load_pickle(os.path.join('Arxiv','Llama_re_id.pkl'))  #2 Map node IDs to new index IDs in the extended LLM vocabulary.
         self.llama_embed=load_pickle(os.path.join('Arxiv','Llama_embeds.pkl')) #3 The words embedding of Llama-7b, which is freezed during LoRA Tuning. 
         self.l_max=2048 # It can be adjusted if CUDA Out of Memory
-        self.real_feature=load_pickle(os.path.join('Arxiv','Llama_giant.pkl')) #4 Preprocessed Numerical Node Feature Embedding
+        self.real_feature=load_pickle(os.path.join('Arxiv','Llama_giant.pkl')) #4 Numerical GIANT Node Feature Embedding, dim=768
+        #self.real_feature=load_pickle(os.path.join('Arxiv','Llama_real_feature.pkl')) #4 Numerical OGB Node Feature Embedding, dim=128
         self.train_L1=load_pickle(os.path.join('Arxiv','L1.pkl'))  
         #5 1-hop Neighbor list for every node, we don't generate and keep corresponding 2/3-hop neighbor lists in advance for efficiency.
         self.transductive=load_pickle(os.path.join('Arxiv','transductive.pkl'))  #6 a list, store test (transductive.pkl)/ val (val.pkl) node ID
