@@ -1,1 +1,1 @@
-Please download and put the Llama-v1-7B checkpoint files under this folder.
+Please download and put our provided original Llama-v1-7B checkpoint files under this folder, which is already preprocessed via HuggingFace format transformation script.

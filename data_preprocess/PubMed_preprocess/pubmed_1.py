@@ -7,6 +7,7 @@ import torch_geometric.transforms as T
 from sklearn.preprocessing import normalize
 import json
 import pandas as pd
+import re
 
 import pickle
 
@@ -23,7 +24,6 @@ def save_pickle(data, filename):
 
 def get_pubmed_casestudy(corrected=False, SEED=0):
     _, data_X, data_Y, data_pubid, data_edges = parse_pubmed()
-    #data_X = normalize(data_X, norm="l1")其实要做
 
     torch.manual_seed(SEED)
     if torch.cuda.is_available():
@@ -52,11 +52,7 @@ def get_pubmed_casestudy(corrected=False, SEED=0):
     data.test_id = np.sort(node_id[int(data.num_nodes * 0.8):])
 
     if corrected:
-        is_mistake = np.loadtxt(
-            'pubmed_casestudy/pubmed_mistake.txt', dtype='bool')
-        data.train_id = [i for i in data.train_id if not is_mistake[i]]
-        data.val_id = [i for i in data.val_id if not is_mistake[i]]
-        data.test_id = [i for i in data.test_id if not is_mistake[i]]
+        pass
 
     data.train_mask = torch.tensor(
         [x in data.train_id for x in range(data.num_nodes)])
@@ -152,19 +148,8 @@ def get_raw_text_pubmed(use_text=True, seed=0):
 
     f = open('./PubMed_orig/pubmed.json')
     pubmed = json.load(f)
-    #print(len(pubmed))
     df_pubmed = pd.DataFrame.from_dict(pubmed)
-    L=list(df_pubmed['PMID'])
-    wrong=[]
-    for gg in range(19717):
-        if L[gg]!=data_pubid[gg]:
-            wrong.append(gg)
-    print(len(wrong))
-    print(L[2459])
-    print(data_pubid[2459])
-    print(df_pubmed[2459:2450])
-    print(wrong)
-    #print(list(df_pubmed['PMID'])==data_pubid)
+    #L=list(df_pubmed['PMID'])
 
     AB = df_pubmed['AB'].fillna("")
     TI = df_pubmed['TI'].fillna("")
@@ -179,63 +164,35 @@ def get_raw_text_pubmed(use_text=True, seed=0):
     return data, title, abss, data_pubid
 
 data, title, abss, data_pubid = get_raw_text_pubmed()
-#3728 13844 16247 ;;;;1,0,2 ;;;;;  1:type2 0:experimental 2:type1
-print(data_pubid[3728],data_pubid[13844],data_pubid[16247])
 
-
-
-tape_pubmed=load_pickle('tape_pubmed.pkl')
-
-
-p_classification=list(data.train_id)
-p_transductive=list(data.test_id)
-classification,transductive=[],[]
-for i in p_classification:
-    classification.append(tape_pubmed[i])
-for j in p_transductive:
-    transductive.append(tape_pubmed[j])
-#save_pickle(transductive, 'big_final_pub_transductive.pkl')
-#save_pickle(classification, 'big_final_pub_classification.pkl')
-print(len(classification))#11830
-print(len(transductive))#3944
-
-print(data)
-print(data.x)
-print(len(title),len(abss))
-#save_pickle(abss,'pubmed_abs.pkl')
-#save_pickle(title,'pubmed_title.pkl')
+print(len(title),len(abss)) # 19717
+save_pickle(abss,'pubmed_abs.pkl')
+save_pickle(title,'pubmed_title.pkl')
 
 from torch_geometric.datasets import Planetoid
 dataset = Planetoid('./pubmed_data', 'PubMed',split='public')
 g=dataset[0]
-print(len(set(g.x.sum(1).tolist())))   #19660
-print(len(set(data.x.sum(1).tolist())))
-print(title[19716])
-import re
-print(abss[19716])
 
-#same=0
-#a={}
-#from tqdm import tqdm
-#for j in tqdm(range(19717)):
- #   print(j)
-  #  tt=torch.tensor(list(set(g.x[j].tolist())))
-   # a[j]=[]
-    #for i in range(19717):
-     #   if tt.equal(torch.tensor(list(set(data.x[i].tolist())))):
-      #      a[j].append(i)
-       #     same+=1
+same=0
+a={}
+from tqdm import tqdm
+for j in tqdm(range(19717)):    # Alignment Step, this step takes a few hours.
+    print(j)
+    tt=torch.tensor(list(set(g.x[j].tolist())))
+    a[j]=[]
+    for i in range(19717):
+        if tt.equal(torch.tensor(list(set(data.x[i].tolist())))):
+            a[j].append(i)
+            same+=1
 print()
-#print(same) #19727
-a=load_pickle('pubmed_map.pkl')
-rest=load_pickle('pubmed_rest.pkl')
+print(same) #19727, 19727-19717=10 = 2+2+6 = 2*(2-1) + 2*(2-1) + 3*(3-1)
 print(len(a))  #19717
 
+rest=[]
 for k,v in a.items():
     if len(v)>1:
         print((k,len(v),v))
-       # rest.append(k)
-print(rest)
-#save_pickle(a,'pubmed_map.pkl')
-#save_pickle(rest,'pubmed_rest.pkl')
-
+        rest.append(k)
+print(rest)  # len(rest)= 7 = 2*2 + 1*3 , i.e.  2 overlaps with size 2, 1 overlaps with size 3
+save_pickle(a,'pubmed_map.pkl')
+save_pickle(rest,'pubmed_rest.pkl')

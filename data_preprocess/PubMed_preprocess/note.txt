@@ -1,0 +1,1 @@
+The required 'PubMed_orig' data folder in the preprocess scripts, which is collected by TAPE, should be downloaded according to the google drive link in README

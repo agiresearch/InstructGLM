@@ -50,7 +50,7 @@ def get_cora_casestudy(SEED=0):
     return data, data_citeid
 
 
-def parse_cora():  #无随机性,其余两步骤有随机性
+def parse_cora():
     path = './Cora/cora'
     idx_features_labels = np.genfromtxt(
         "{}.content".format(path), dtype=np.dtype(str))
@@ -194,78 +194,23 @@ def save_pickle(data, filename):
     with open(filename, "wb") as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-tape_cora=load_pickle('tape_cora.pkl')
-print(tape_cora[2150])
+tape_cora=load_pickle('tape_cora.pkl') # Aligned ID map from TAPE(with title & abstract meta info) to official Cora.
+
 data, title,abss = get_raw_text_cora()
 p_classification=list(data.train_id)
+p_validation=list(data.val_id)
 p_transductive=list(data.test_id)
-#print()
-#print(len(torch.where(data.train_mask==True)[0].tolist()))
-#print(len(torch.where(data.test_mask==True)[0].tolist()))
-#print(list(data.train_id)==(torch.where(data.train_mask==True)[0].tolist()))
-#p_classification=torch.where(data.train_mask==True)[0].tolist()
-#p_transductive=torch.where(data.test_mask==True)[0].tolist()
-classification,transductive=[],[]
+
+classification,validation,transductive=[],[],[]
 for i in p_classification:
     classification.append(tape_cora[i])
+for p in p_validation:
+    validation.append(tape_cora[p])
 for j in p_transductive:
     transductive.append(tape_cora[j])
-#save_pickle(transductive, 'big_final_cora_transductive.pkl')
-#save_pickle(classification, 'big_final_cora_classification.pkl')
+save_pickle(transductive, 'final_cora_transductive.pkl')
+save_pickle(validation, 'final_cora_valid.pkl')
+save_pickle(classification, 'final_cora_classification.pkl')
 print(len(classification))
+print(len(validation))
 print(len(transductive))
-
-
-
-#save_pickle(abss,'cora_abs.pkl')
-#save_pickle(title,'cora_title.pkl')
-
-print(data.x)
-
-from torch_geometric.datasets import Planetoid
-dataset = Planetoid('./cora_data', 'Cora',split='public')
-g=dataset[0]
-
-
-same=0
-
-a={}
-for j in range(2708):
-    tt=g.x[j]
-    a[j]=[]
-    for i in range(2708):
-        if tt.equal(data.x[i]):
-            a[j].append(i)
-            same+=1
-print()
-print(same)
-print(len(a))
-print()
-rest=[]
-for k,v in a.items():
-    if len(v)>1:
-        rest.append([k,len(v),v])
-#save_pickle(a, 'cora_map.pkl')
-#save_pickle(rest, 'cora_rest.pkl')
-print(rest)
-sum=0
-all=[]
-for k in rest:
-    all.append(list(set(k[2])))   #set help order
-    sum+=k[1]-1
-print(sum)
-print(all)
-print(len(all))
-simple=[]
-for thin in all:
-    if thin not in simple and thin[::-1] not in simple:
-        simple.append(thin)
-print(len(simple))
-print(simple)
-print(len(rest))
-#save_pickle(all,'cora_all.pkl')
-#save_pickle(simple,'cora_simple.pkl')
-
-print(data.x[2150].equal(data.x[2183]))   #这两个点完全一样
-
-
