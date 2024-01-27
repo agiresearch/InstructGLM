@@ -286,7 +286,7 @@ def new_reduce_dict(input_dict):  # We mainly use this for our paper.
         input_dict_cuda_vals = {}
         for k, v in input_dict.items():
             if type(v) == torch.Tensor:
-                input_dict_cuda_vals[k] = v.to('cuda')  #这该不会to到一张卡上去了吧,并没有,放心吧
+                input_dict_cuda_vals[k] = v.to('cuda')  
             else:
                 input_dict_cuda_vals[k] = torch.tensor(v, device='cuda')
 
