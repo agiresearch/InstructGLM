@@ -76,11 +76,11 @@ Please cite the following paper corresponding to the repository:
 
 ```
 
-@article{ye2023natural,
-  title={Natural language is all a graph needs},
+@article{ye2023language,
+  title={Language is All a Graph Needs},
   author={Ye, Ruosong and Zhang, Caiqi and Wang, Runhui and Xu, Shuyuan and Zhang, Yongfeng},
-  journal={arXiv:2308.07134},
-  year={2023}
+  journal={EACL},
+  year={2024}
 }
 
 ```
