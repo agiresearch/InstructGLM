@@ -1,8 +1,8 @@
-# Natural Language is All a Graph Needs
+# Language is All a Graph Needs
 
 This repo presents implementation of the **InstructGLM** (Instruction-finetuned Graph Language Model) and provide a natural language interface for graph machine learning:
 
->  **Paper**: Natural Language is All a Graph Needs <br>
+>  **Paper**: Language is All a Graph Needs <br>
 
 >  **Paper link**: [https://arxiv.org/abs/2308.07134](https://arxiv.org/abs/2308.07134)
   
