@@ -1,15 +1,7 @@
 import numpy as np
-# adapted from https://github.com/jcatw/scnn
-import torch
 import random
-from torch_geometric.datasets import Planetoid
-import torch_geometric.transforms as T
-from sklearn.preprocessing import normalize
-import json
-import pandas as pd
-import re
-
-import pickle
+from transformers import AutoTokenizer, AutoModel
+from datasets import load_dataset
 
 def load_pickle(filename):
     with open(filename, "rb") as f:
@@ -19,50 +11,37 @@ def save_pickle(data, filename):
     with open(filename, "wb") as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
 
-# return pubmed dataset as pytorch geometric Data object together with 60/20/20 split, and list of pubmed IDs
+def get_pubmed_casestudy(SEED=0):
+    data_X, data_Y, data_pubid, data_edges = parse_pubmed()
 
-
-def get_pubmed_casestudy(corrected=False, SEED=0):
-    _, data_X, data_Y, data_pubid, data_edges = parse_pubmed()
-
-    torch.manual_seed(SEED)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(SEED)
-    np.random.seed(SEED)  # Numpy module.
     random.seed(SEED)  # Python random module.
+    np.random.seed(SEED)  # Numpy module.
 
     # load data
-    data_name = 'PubMed'
-    # path = osp.join(osp.dirname(osp.realpath(__file__)), 'dataset')
-    dataset = Planetoid('pubmed_dataset', data_name, transform=T.NormalizeFeatures())
+    data_name = 'pubmed'
+    dataset = load_dataset('pubmed', split='train')
+
     data = dataset[0]
 
-    # replace dataset matrices with the PubMed-Diabetes data, for which we have the original pubmed IDs
-    data.x = torch.tensor(data_X)
-    data.edge_index = torch.tensor(data_edges)
-    data.y = torch.tensor(data_Y)
+    data['x'] = data_X
+    data['edge_index'] = data_edges
+    data['y'] = data_Y
+    data['num_nodes'] = len(data_Y)
 
     # split data
-    node_id = np.arange(data.num_nodes)
+    node_id = np.arange(data['num_nodes'])
     np.random.shuffle(node_id)
 
-    data.train_id = np.sort(node_id[:int(data.num_nodes * 0.6)])
-    data.val_id = np.sort(
-        node_id[int(data.num_nodes * 0.6):int(data.num_nodes * 0.8)])
-    data.test_id = np.sort(node_id[int(data.num_nodes * 0.8):])
+    data['train_id'] = np.sort(node_id[:int(data['num_nodes'] * 0.6)])
+    data['val_id'] = np.sort(
+        node_id[int(data['num_nodes'] * 0.6):int(data['num_nodes'] * 0.8)])
+    data['test_id'] = np.sort(node_id[int(data['num_nodes'] * 0.8):])
 
-    if corrected:
-        pass
-
-    data.train_mask = torch.tensor(
-        [x in data.train_id for x in range(data.num_nodes)])
-    data.val_mask = torch.tensor(
-        [x in data.val_id for x in range(data.num_nodes)])
-    data.test_mask = torch.tensor(
-        [x in data.test_id for x in range(data.num_nodes)])
+    data['train_mask'] = [x in data['train_id'] for x in range(data['num_nodes'])]
+    data['val_mask'] = [x in data['val_id'] for x in range(data['num_nodes'])]
+    data['test_mask'] = [x in data['test_id'] for x in range(data['num_nodes'])]
 
     return data, data_pubid
-
 
 def parse_pubmed():
     path = './PubMed_orig/data/'
@@ -139,17 +118,14 @@ def parse_pubmed():
 
     return data_A, data_X, data_Y, data_pubid, np.unique(data_edges, axis=0).transpose()
 
-
 def get_raw_text_pubmed(use_text=True, seed=0):
-    data, data_pubid = get_pubmed_casestudy(SEED=seed)
-   # print(data_pubid)
+    data, data_pubid = get_pubmed_casestudy(seed)
     if not use_text:
         return data, None
 
     f = open('./PubMed_orig/pubmed.json')
     pubmed = json.load(f)
     df_pubmed = pd.DataFrame.from_dict(pubmed)
-    #L=list(df_pubmed['PMID'])
 
     AB = df_pubmed['AB'].fillna("")
     TI = df_pubmed['TI'].fillna("")
@@ -157,11 +133,11 @@ def get_raw_text_pubmed(use_text=True, seed=0):
     title=[]
     abss=[]
     for ti, ab in zip(TI, AB):
-       # t = 'Title: ' + ti + '\n'+'Abstract: ' + ab
-        #text.append(t)
         title.append(ti)
         abss.append(ab)
     return data, title, abss, data_pubid
+
+import pickle
 
 data, title, abss, data_pubid = get_raw_text_pubmed()
 
@@ -169,8 +145,8 @@ print(len(title),len(abss)) # 19717
 save_pickle(abss,'pubmed_abs.pkl')
 save_pickle(title,'pubmed_title.pkl')
 
-from torch_geometric.datasets import Planetoid
-dataset = Planetoid('./pubmed_data', 'PubMed',split='public')
+from datasets import load_dataset
+dataset = load_dataset('pubmed', split='train')
 g=dataset[0]
 
 same=0
@@ -178,10 +154,10 @@ a={}
 from tqdm import tqdm
 for j in tqdm(range(19717)):    # Alignment Step, this step takes a few hours.
     print(j)
-    tt=torch.tensor(list(set(g.x[j].tolist())))
+    tt=torch.tensor(list(set(g['x'][j].tolist())))
     a[j]=[]
     for i in range(19717):
-        if tt.equal(torch.tensor(list(set(data.x[i].tolist())))):
+        if tt.equal(torch.tensor(list(set(data['x'][i].tolist())))):
             a[j].append(i)
             same+=1
 print()

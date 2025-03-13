@@ -1,51 +1,39 @@
 import numpy as np
-import torch
 import random
+from transformers import AutoTokenizer, AutoModel
+from datasets import load_dataset
 
-from torch_geometric.datasets import Planetoid
-import torch_geometric.transforms as T
-
-
-# return cora dataset as pytorch geometric Data object together with 60/20/20 split, and list of cora IDs
-
+# return cora dataset as Huggingface Dataset object together with 60/20/20 split, and list of cora IDs
 
 def get_cora_casestudy(SEED=0):
     data_X, data_Y, data_citeid, data_edges = parse_cora()
-    # data_X = sklearn.preprocessing.normalize(data_X, norm="l1")
 
-    torch.manual_seed(SEED)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(SEED)
-    np.random.seed(SEED)  # Numpy module.
     random.seed(SEED)  # Python random module.
+    np.random.seed(SEED)  # Numpy module.
 
     # load data
     data_name = 'cora'
-    # path = osp.join(osp.dirname(osp.realpath(__file__)), 'dataset')
-    dataset = Planetoid('./cora_dataset', data_name,
-                        transform=T.NormalizeFeatures())
+    dataset = load_dataset('cora', split='train')
+
     data = dataset[0]
 
-    data.x = torch.tensor(data_X).float()
-    data.edge_index = torch.tensor(data_edges).long()
-    data.y = torch.tensor(data_Y).long()
-    data.num_nodes = len(data_Y)
+    data['x'] = data_X
+    data['edge_index'] = data_edges
+    data['y'] = data_Y
+    data['num_nodes'] = len(data_Y)
 
     # split data
-    node_id = np.arange(data.num_nodes)
+    node_id = np.arange(data['num_nodes'])
     np.random.shuffle(node_id)
 
-    data.train_id = np.sort(node_id[:int(data.num_nodes * 0.6)])
-    data.val_id = np.sort(
-        node_id[int(data.num_nodes * 0.6):int(data.num_nodes * 0.8)])
-    data.test_id = np.sort(node_id[int(data.num_nodes * 0.8):])
+    data['train_id'] = np.sort(node_id[:int(data['num_nodes'] * 0.6)])
+    data['val_id'] = np.sort(
+        node_id[int(data['num_nodes'] * 0.6):int(data['num_nodes'] * 0.8)])
+    data['test_id'] = np.sort(node_id[int(data['num_nodes'] * 0.8):])
 
-    data.train_mask = torch.tensor(
-        [x in data.train_id for x in range(data.num_nodes)])
-    data.val_mask = torch.tensor(
-        [x in data.val_id for x in range(data.num_nodes)])
-    data.test_mask = torch.tensor(
-        [x in data.test_id for x in range(data.num_nodes)])
+    data['train_mask'] = [x in data['train_id'] for x in range(data['num_nodes'])]
+    data['val_mask'] = [x in data['val_id'] for x in range(data['num_nodes'])]
+    data['test_mask'] = [x in data['test_id'] for x in range(data['num_nodes'])]
 
     return data, data_citeid
 
@@ -202,8 +190,8 @@ save_pickle(title,'cora_title.pkl')   # Save Title Info from TAPE
 
 
 # Next, we begin to align the node ID between TAPE and official Cora.
-from torch_geometric.datasets import Planetoid
-dataset = Planetoid('./cora_data', 'Cora',split='public')
+from datasets import load_dataset
+dataset = load_dataset('cora', split='train')
 g=dataset[0]
 
 
@@ -211,15 +199,15 @@ same=0
 
 a={}
 for j in range(2708):    # Align ID according to official numerical embedding
-    tt=g.x[j]
+    tt=g['x'][j]
     a[j]=[]
     for i in range(2708):
-        if tt.equal(data.x[i]):
+        if np.array_equal(tt, data['x'][i]):
             a[j].append(i)
             same+=1
 print()
 print(same)  # 2752 > 2708, which means there are repeated nodes in both official Cora and TAPE Cora
-#For an example, print(data.x[2150].equal(data.x[2183]))   #The 2 nodes are totally same.
+#For an example, print(data['x'][2150].equal(data['x'][2183]))   #The 2 nodes are totally same.
 
 print(len(a)) # 2708
 print()
